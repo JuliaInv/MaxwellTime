@@ -1,10 +1,9 @@
 module MaxwellTime
 	
-	using MUMPS
 	using jInv.Mesh.AbstractMesh
 	using JOcTree
-	using Utils
-	using LinearSolvers
+	using jInv.Utils
+	using jInv.LinearSolvers
 	using KrylovMethods
 			
 	export MaxwellTimeParam, getMaxwellTimeParam,MaxwellTimeBDF2Param,
@@ -144,6 +143,7 @@ module MaxwellTime
 	include("magnetostaticsCurrentPoly.jl")
         include("getDataAlt.jl")
         include("solveMaxTime.jl")
+        include("solveDC.jl")
 	
 	
 end

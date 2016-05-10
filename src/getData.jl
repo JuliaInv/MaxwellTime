@@ -134,7 +134,8 @@ function getData(sigma::Array{Float64,1},param::MaxwellTimeBDF2Param)
 	  groundedSource   = true
 	  DCsolver.doClear = 1
 	  Adc              = G'*Msig*G
-	  phi0,mySolver    = solveLinearSystem(Adc,full(G'*s),DCsolver,1,0)
+	  #phi0,mySolver    = solveLinearSystem(Adc,full(G'*s),DCsolver,1,0)
+	  phi0,DCSolver    = solveDC!(Adc,G'*s,DCsolver)
 	  ew[:,:,1]        = -G*phi0
 	  DCsolver.doClear = 0
 	  if ~storeDCf
@@ -149,10 +150,10 @@ function getData(sigma::Array{Float64,1},param::MaxwellTimeBDF2Param)
         EMsolver.doClear = 1
 	A    = Curl'*Mmu*Curl + 3/(2*dt)*Msig
 	rhs  = 3/(2*dt)*( Msig*ew[:,:,1] + (wave[1]-wave[2])*s )
-	ehat,EMsolver = solveMaxTime(A,rhs,Msig,Msh,2/(3*dt),EMsolver)
+	ehat,EMsolver = solveMaxTime!(A,rhs,Msig,Msh,2/(3*dt),EMsolver)
 	EMsolver.doClear = 0
 	rhs  = 3/(2*dt)*( Msig*ehat )
-	ehat2,EMsolver = solveMaxTime(A,rhs,Msig,Msh,2/(3*dt),EMsolver)
+	ehat2,EMsolver = solveMaxTime!(A,rhs,Msig,Msh,2/(3*dt),EMsolver)
 	ew[:,:,2] = 0.5*(ehat+ehat2)
 	param.ehat = ehat
 	
@@ -160,7 +161,7 @@ function getData(sigma::Array{Float64,1},param::MaxwellTimeBDF2Param)
 	for i=2:nt
 	  rhs = -3/(2*dt)*( (wave[i+1]-(4/3)*wave[i]+wave[i-1]/3)*s + 
 	        Msig*(-4/3*ew[:,:,i] + ew[:,:,i-1]/3 ) )
-	  ew[:,:,i+1],EMsolver = solveMaxTime(A,rhs,Msig,Msh,dt,EMsolver)
+	  ew[:,:,i+1],EMsolver = solveMaxTime!(A,rhs,Msig,Msh,dt,EMsolver)
 	end
 	if ~storeEMf
 	  clear!(EMsolver)
