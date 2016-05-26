@@ -2,10 +2,10 @@
 #grounded source. Single source and multiple source configurations tested.
 
 using MaxwellTime
-using Mesh
+using JOcTree
 using Base.Test
-using LinearSolvers
-using Utils
+using jInv.LinearSolvers
+using jInv.Utils
 using MUMPS
 
 println("Testing single source")
@@ -52,8 +52,7 @@ b     = 10*rand(Msh.nc) - 4
 sigma = a.^b
 
 #Get data at initial model
-solver = getMUMPSsolver([])
-pFor   = MaxwellTimeParam(Msh,Sources,P',dt,wave,zeros(0),"",solver)
+pFor   = getMaxwellTimeParam(Msh,Sources,P',dt,wave)
 println("Getting data")
 d,pFor = getData(sigma,pFor)
 ew     = pFor.fields
@@ -99,9 +98,10 @@ z      = rand(Msh.nc)
 JzMat  = -Pj*solveMUMPS(dCdu,dCdm*z)
 println("Getting MaxwellTime sens mat vec product")
 JzStep = getSensMatVec(z,sigma,pFor)
-errInf = norm(JzMat-JzStep,Inf)
-errSL2 = norm(JzMat-JzStep)/sqrt(size(P,1))
-println("Inf norm and scaled L2 norm errors in Jz are $errInf and $errSL2")
+errInf = norm(JzMat-JzStep,Inf)/norm(JzMat,Inf)
+errSL2 = norm(JzMat-JzStep)/norm(JzMat)
+@test errSL2 < 1e-9
+println("Relative Inf and L2 norm errors in Jz are $errInf and $errSL2")
 
 #Transpose
 x       = rand(5*size(P,1))
@@ -109,9 +109,10 @@ tmp     = solveMUMPS(dCdu',Pj'*x)
 JtxMat  = -dCdm'*tmp
 println("Getting MaxwellTime sens transpose mat vec product")
 JtxStep = getSensTMatVec(x,sigma,pFor)
-errInfT = norm(JtxMat-JtxStep,Inf)
-errSL2T = norm(JtxMat-JtxStep)/sqrt(Msh.nc)
-println("Inf norm and scaled L2 norm errors in Jtx are $errInfT and $errSL2T")
+errInfT = norm(JtxMat-JtxStep,Inf)/norm(JtxMat,Inf)
+errSL2T = norm(JtxMat-JtxStep)/norm(JtxMat)
+@test errSL2T < 1e-9
+println("Relative Inf and L2 norm errors in Jtx are $errInfT and $errSL2T")
 
 #--------------------------------------------------------------------------
 
@@ -133,8 +134,7 @@ for i=1:ns
 end
 
 #Get data at initial model
-solver = getMUMPSsolver([])
-pFor   = MaxwellTimeParam(Msh,Sources,P',dt,wave,zeros(0),"",solver)
+pFor   = getMaxwellTimeParam(Msh,Sources,P',dt,wave)
 println("Getting data")
 D,pFor = getData(sigma,pFor)
 
@@ -142,18 +142,14 @@ println(" ")
 println("==========  Derivative Test ======================")
 println(" ")
 
-z = rand(size(sigma))*1e-2;z[sigma.<0.009] = 0;
-Jz = getSensMatVec(z,sigma,pFor)
-nrmold = [0.0 0.0]
-nrm    = [0.0 0.0]
-for i=1:10
-	alpha = 2.0^(-i)
-	D1, = getData(sigma+alpha*z,pFor)
-	
-	nrm = [norm(D1[:]-D[:]) norm(D1[:]-D[:]-alpha*Jz)]
-	println(alpha,"      ",nrm[1],"       ",nrm[2],"       ",nrmold[2]/nrm[2])
-	nrmold = nrm
+function f(sigdum)
+  d, = getData(sigdum,pFor)
+  return d
 end
+  
+df(zdum,sigdum) = getSensMatVec(zdum,sigdum,pFor)
+pass,Error,Order = checkDerivative(f,df,sigma;nSuccess=5)
+@test pass
 
 
 println(" ")
@@ -173,4 +169,5 @@ toc()
 I2 = dot(JTz,z)
 
 println(I1,"      ",I2)
-@test abs(I1-I2)/abs(I1) < 1e-5
+println("Relative error:",abs(I1-I2)/abs(I1))
+@test abs(I1-I2)/abs(I1) < 1e-10

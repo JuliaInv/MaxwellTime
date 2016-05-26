@@ -3,10 +3,10 @@
 #time-step size used.
 
 using MaxwellTime
-using Mesh
+using JOcTree
 using Base.Test
-using LinearSolvers
-using Utils
+using jInv.LinearSolvers
+using jInv.Utils
 using MUMPS
 include("getC.jl")
 # println("Testing single source")
@@ -54,13 +54,12 @@ b     = 10*rand(Msh.nc) - 4
 sigma = a.^b
  
 #Get data at initial model
-solver = getMUMPSsolver([])
-pFor   = MaxwellTimeBDF2Param(Msh,Sources,P',dt,nt,wave,zeros(0),"",solver,zeros(1,1))
+pFor   = getMaxwellTimeBDF2Param(Msh,Sources,P',dt,nt,wave)
 println("Getting data")
-d,pFor,phi0 = getData(sigma,pFor)
+d,pFor = getData(sigma,pFor)
 ew     = pFor.fields
 ehat   = pFor.ehat
-u0     = [phi0;vec(ew[:,1,2:end])];
+#u0     = [phi0;vec(ew[:,1,2:end])];
 
 #Form sensitivity matrix and related quantities
 println("Forming sensitivity matrix")
@@ -120,6 +119,7 @@ println("Getting MaxwellTime sens mat vec product")
 JzStep = getSensMatVec(z,sigma,pFor)
 errInf = norm(JzMat-JzStep,Inf)/norm(JzMat,Inf)
 errSL2 = norm(JzMat-JzStep)/norm(JzMat)
+@test errSL2 < 1e-9
 println("Rel. Inf and L2 norm errors in Jz are $errInf and $errSL2")
 
 #Transpose
@@ -131,6 +131,7 @@ println("Getting MaxwellTime sens transpose mat vec product")
 JtxStep = getSensTMatVec(x,sigma,pFor)
 errInfT = norm(JtxMat-JtxStep,Inf)/norm(JtxMat,Inf)
 errSL2T = norm(JtxMat-JtxStep)/norm(JtxMat)
+@test errSL2T < 1e-9
 println("Rel. Inf and L2 norm errors in Jtx are $errInfT and $errSL2T")
 
 #--------------------------------------------------------------------------
@@ -153,8 +154,7 @@ for i=1:ns
 end
 
 #Get data at initial model
-solver = getMUMPSsolver([])
-pFor   = MaxwellTimeBDF2Param(Msh,Sources,P',dt,nt,wave,zeros(0),"",solver,zeros(1,1))
+pFor   = pFor   = getMaxwellTimeBDF2Param(Msh,Sources,P',dt,nt,wave)
 println("Getting data")
 D,pFor = getData(sigma,pFor)
 
@@ -165,20 +165,14 @@ println(" ")
 println("==========  Derivative Test ======================")
 println(" ")
 
-z = rand(size(sigma))*1e-2; z[sigma.<0.009] = 0;
-Jz = getSensMatVec(z,sigma,pFor)
-#JzMat  = -Pj*solveMUMPS(dCdu,dCdm*z)
-nrmold = [0.0 0.0 0.0]
-nrm    = [0.0 0.0 0.0]
-for i=1:10
-	alpha = 500*(2.0^(-i))
-	D1, = getData(sigma+alpha*z,pFor)
-	
-	nrm = [norm(D1[:]-D[:]) norm(D1[:]-D[:]-alpha*Jz)]# norm(D1[:]-D[:]-alpha*JzMat)]
-# 	@printf "%9.2e  %9.2e   %9.2e   %.4f   %9.2e   %.4f\n" alpha nrm[1] nrm[2] nrmold[2]/nrm[2] nrm[3] nrmold[3]/nrm[3]
-	@printf "%9.2e  %9.2e   %9.2e   %.4f\n" alpha nrm[1] nrm[2] nrmold[2]/nrm[2]
-	nrmold = nrm
+function f(sigdum)
+  d, = getData(sigdum,pFor)
+  return d
 end
+  
+df(zdum,sigdum) = getSensMatVec(zdum,sigdum,pFor)
+pass,Error,Order = checkDerivative(f,df,sigma;nSuccess=5)
+@test pass
 
 
 println(" ")
@@ -199,4 +193,4 @@ I2 = dot(JTz,z)
 
 println(I1,"      ",I2)
 println("Relative error:",abs(I1-I2)/abs(I1))
-@test abs(I1-I2)/abs(I1) < 1e-5
+@test abs(I1-I2)/abs(I1) < 1e-10

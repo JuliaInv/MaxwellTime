@@ -85,9 +85,10 @@ export solveMaxTime!
 #   return en, linSolParam
 # end
 
+#Handles direct solvers for BDF-2
 function solveMaxTime!(A,rhs,Msig,M::AbstractMesh,dt::Real,linSolParam::Union{MUMPSsolver,jInvPardisoSolver},flag=0)
 #= 
- 	Solve the maxwell system using MUMPS
+ 	Solve the maxwell system using MUMPS or Pardiso
 
  	en, = solveMaxTime!(A,rhs,Msig,M::AbstractMesh,w::Real,linSolParam::Union{MUMPSsolver,jInvPardisoSolver},flag=0)
 
@@ -95,6 +96,46 @@ function solveMaxTime!(A,rhs,Msig,M::AbstractMesh,dt::Real,linSolParam::Union{MU
   X              = zeros(size(rhs))
   X, linSolParam = solveLinearSystem!(A,rhs,X,linSolParam,flag)
   
+
+return X, linSolParam
+end
+
+#Handles direct solvers for BE when discarding factorizations
+function solveMaxTime!(A,rhs,Msig,M::AbstractMesh,dt::Vector{Float64},it::Int64,
+                       iFac::Int64,linSolParam::Union{MUMPSsolver,jInvPardisoSolver},
+                       flag=0)
+#= 
+ 	Solve the maxwell system using MUMPS or Pardiso
+
+ 	en, = solveMaxTime!(A,rhs,Msig,M::AbstractMesh,w::Real,linSolParam::Union{MUMPSsolver,jInvPardisoSolver},flag=0)
+
+=#
+  if ( (it==1) || (dt[it] != dt[it-1]) )
+    linSolParam.doClear = 1
+  end
+  X                   = zeros(size(rhs))
+  X, linSolParam      = solveLinearSystem!(A,rhs,X,linSolParam,flag)
+  linSolParam.doClear = 0
+
+return X, linSolParam
+end
+
+#Handles direct solvers for BE when keeping factorizations
+function solveMaxTime!{T<:Union{MUMPSsolver,jInvPardisoSolver}}(A,rhs,Msig,
+                      M::AbstractMesh,dt::Vector{Float64},it::Int64,iFac::Int64,
+                      linSolParam::Array{T},flag=0)
+#= 
+ 	Solve the maxwell system using MUMPS or Pardiso
+
+ 	en, = solveMaxTime!{T<:Union{MUMPSsolver,jInvPardisoSolver}}(A,rhs,Msig,
+                      M::AbstractMesh,dt::Vector{Float64},it::Int64,iFac::Int64,
+                      linSolParam::Array{T},flag=0)
+
+=#
+
+  X              = zeros(size(rhs))
+  X, linSolParam[iFac] = solveLinearSystem!(A,rhs,X,linSolParam[iFac],flag)
+  linSolParam[iFac].doClear = 0
 
 return X, linSolParam
 end

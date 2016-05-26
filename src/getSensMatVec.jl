@@ -18,7 +18,9 @@ function getSensMatVec(z::Vector{Float64},sigma::Vector{Float64},
 	dt       = param.dt
 	wave     = param.wave
 	Msh      = param.M
-	mySolver = param.solver
+	EMsolver = param.EMsolver
+	DCsolver = param.DCsolver
+	storeDCf = param.storeDCfactors
 	ew       = param.fields
 	
 	mu   = 4*pi*1e-7  # magnetic permeability
@@ -48,7 +50,6 @@ function getSensMatVec(z::Vector{Float64},sigma::Vector{Float64},
 	lam = zeros(Float64,ne,ns,2)
 	Jv  = zeros(Float64,size(P,2),ns,nt)
 	
-	mySolver.doClear = 1
 	#Do the DC part of dCdm if source is grounded.
 	#Note that this code assumes (for grounded sources) that DC data
 	#Are computed as the integral of electric field over a receiver
@@ -59,35 +60,38 @@ function getSensMatVec(z::Vector{Float64},sigma::Vector{Float64},
 	  for j = 1:ns
 	    Gzi = G'*Ne'*getdEdgeMassMatrix(Msh,-Ne*ew[:,j,1])
 	    rhs = Gzi*z
-	    lam0,mySolver    = solveLinearSystem(A,rhs,mySolver,1,0)
+	    lam0,DCsolver    = solveDC!(A,rhs,DCsolver)
 	    lam[:,j,1]       = -G*lam0 #Taking gradient of lam0
 	                               #Prepares for data projection and
-	                               #preps lam for use as rhsin first 
+	                               #preps lam for use as rhs in first 
 	                               #time-step
-	    mySolver.doClear = 0
+	    DCsolver.doClear = 0
 	    Jvdc[:,j] = -P'*lam[:,j,1]
 	  end
-	  clear!(mySolver)
+	  if ~storeDCf
+	    clear!(DCsolver)
+	    DCsolver.doClear = 1
+	  end
 	end
 	
-	dtLast = 0.0 #Size of last time step, used to check if 
-	             #factorization of Forward mod. matrix is needed.
+	nFacs = 0
 	for i=1:nt
 	  A = Curl'*Mmu*Curl + 1/dt[i]*Msig
-	  mySolver.doClear = (dt[i] == dtLast) ? 0 : 1
+	  if ( (i==1) || (dt[i] != dt[i-1]) )
+	    nFacs += 1
+	  end
     	  for j = 1:ns
    	 	Gzi = (1/dt[i])*Ne'*getdEdgeMassMatrix(Msh,Ne*(ew[:,j,i+1]-
    	 	       ew[:,j,i]))
    	 	rhs = Gzi*z + 1/dt[i]*Msig*lam[:,j,1]
-   	 	lam[:,j,2],mySolver = solveLinearSystem(A,rhs,mySolver,1,0)
+   	 	lam[:,j,2],EMsolver = solveMaxTime!(A,rhs,Msig,Msh,dt,i,
+   	 	                                    nFacs,EMsolver)
 	    	
 	    	# compute Jv
 	    	Jv[:,j,i]  = -P'*(lam[:,j,2])
 	    	lam[:,j,1] = lam[:,j,2]
 	  end
-	  dtLast = dt[i]
 	end
-        clear!(mySolver)
         Jv = groundedSource ? [vec(Jvdc);vec(Jv)] : vec(Jv)
 	return Jv
 end
@@ -159,7 +163,7 @@ function getSensMatVec(z::Vector{Float64},sigma::Vector{Float64},
 	  for j = 1:ns
 	    Gzi = G'*Ne'*getdEdgeMassMatrix(Msh,-Ne*ew[:,j,1])
 	    rhs = Gzi*z
-	    lam0,DCsolver    = solveLinearSystem(A,rhs,DCsolver,1,0)
+	    lam0,DCsolver    = solveDC!(A,rhs,DCsolver)
 	    lam[:,j,1]       = -G*lam0
 	    DCsolver.doClear = 0
 	    Jvdc[:,j] = -P'*lam[:,j,1]
@@ -175,11 +179,11 @@ function getSensMatVec(z::Vector{Float64},sigma::Vector{Float64},
 	for j = 1:ns
 	  Gzi                 = 3/(2*dt)*Ne'*getdEdgeMassMatrix(Msh,Ne*(ehat[:,j]-ew[:,j,1])) 
 	  rhs                 = Gzi*z + 3/(2*dt)*Msig*lam[:,j,1]
-	  lmTmp,EMsolver      = solveLinearSystem(A,rhs,EMsolver,1,0)
+	  lmTmp,EMsolver      = solveMaxTime!(A,rhs,Msig,Msh,dt,EMsolver)
 	  EMsolver.doClear    = 0
 	  Gzi                 = Ne'*getdEdgeMassMatrix(Msh,1/dt*Ne*(1.5*ew[:,j,2]-0.75*ehat[:,j]-0.75*ew[:,j,1]))
 	  rhs                 = Gzi*z + 3/(4*dt)*Msig*lam[:,j,1] + 3/(4*dt)*Msig*lmTmp
-	  lam[:,j,2],EMsolver = solveLinearSystem(A,rhs,EMsolver,1,0)
+	  lam[:,j,2],EMsolver = solveMaxTime!(A,rhs,Msig,Msh,dt,EMsolver)
 	  Jv[:,j,1]           = -P'*lam[:,j,2]
 	end
 	
@@ -189,7 +193,7 @@ function getSensMatVec(z::Vector{Float64},sigma::Vector{Float64},
    	 	Gzi = (1/dt)*Ne'*getdEdgeMassMatrix(Msh,Ne*(1.5*ew[:,j,i+1]-
    	 	       2*ew[:,j,i]+0.5*ew[:,j,i-1]))
    	 	rhs = Gzi*z + 1/dt*Msig*(2*lam[:,j,2]-0.5*lam[:,j,1])
-   	 	lam[:,j,3],EMsolver = solveLinearSystem(A,rhs,EMsolver,1,0)
+   	 	lam[:,j,3],EMsolver = solveMaxTime!(A,rhs,Msig,Msh,dt,EMsolver)
 	    	# compute Jv
 	    	Jv[:,j,i]  = -P'*(lam[:,j,3])
 	    	lam[:,j,1] = lam[:,j,2]

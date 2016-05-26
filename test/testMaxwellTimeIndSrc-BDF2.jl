@@ -1,10 +1,9 @@
 using MaxwellTime
-using Mesh
+using JOcTree
 using Base.Test
-using Utils
+using jInv.Utils
 using MUMPS
-using LinearSolvers
-using KrylovMethods
+using jInv.LinearSolvers
 
 
 L  = [4096, 4096, 2048.0]
@@ -57,37 +56,35 @@ for i=1:ns
         Sources[:,i] = P[:,i]
 end
 
-t       = [1:6;]*1e-4 #[0; logspace(-6,-2,25)] #[0,1.3,2.7,4.5,6.4]*1e-8; #        
-dt      = diff(t)
-wave    = zeros(length(dt)+1); wave[1] = 1.0
+dt0  = 1e-4
+nt   = 6
+t    = dt0*collect(0:nt) #[0; logspace(-6,-2,25)] #[0,1.3,2.7,4.5,6.4]*1e-8; #        
+dt   = diff(t)
+wave = zeros(length(dt)+1); wave[1] = 1.0
 
 sigma   = zeros(M.nc)+1e-2
 sigma[Xc[:,3] .> 1024] = 1e-8
 
-solver=getMUMPSsolver([])
-#param = getMaxwellTimeParam(M,Sources,P,dt,wave,solver)
-param = MaxwellTimeBDF2Param(M,Sources,P,dt[1],length(dt),wave,zeros(0),"",solver,zeros(1,1))
+pFor = getMaxwellTimeBDF2Param(M,Sources,P,dt0,nt,wave)
 
 tic()
-D,param = getData(sigma,param);
+D,pFor = getData(sigma,pFor);
 toc()
 
 println(" ")
 println("==========  Derivative Test ======================")
 println(" ")
 
-z = rand(size(sigma))*1e-2;z[sigma.<0.009] = 0;
-Jz = getSensMatVec(z,sigma,param)
-nrmold = [0.0 0.0]
-nrm    = [0.0 0.0]
-for i=1:10
-	alpha = 2.0^(-i)
-	D1, = getData(sigma+alpha*z,param)
-	nrm = [norm(D1[:]-D[:]) norm(D1[:]-D[:]-alpha*Jz)]
-	println(alpha,"      ",nrm[1],"       ",nrm[2],"       ",nrmold[2]/nrm[2])
-	nrmold = copy(nrm)
+z = rand(size(sigma))*1e-1
+z[Xc[:,3] .> 1024] = 0
+function f(sigdum)
+  d, = getData(sigdum,pFor)
+  return d
 end
-
+  
+df(zdum,sigdum) = getSensMatVec(zdum,sigdum,pFor)
+pass,Error,Order = checkDerivative(f,df,sigma;nSuccess=5,v=z)
+@test pass
 
 println(" ")
 println("==========  Adjoint Test ======================")
@@ -95,16 +92,16 @@ println(" ")
 
 v  = randn(prod(size(D)))
 tic()
-Jz = getSensMatVec(z,sigma,param)
+Jz = getSensMatVec(z,sigma,pFor)
 toc()
 I1 = dot(v,Jz)
 
 tic()
-JTz = getSensTMatVec(v,sigma,param)
+JTz = getSensTMatVec(v,sigma,pFor)
 toc()
 
 I2 = dot(JTz,z)
 
 println(I1,"      ",I2)
 println("Relative error:",abs(I1-I2)/abs(I1))
-@test abs(I1-I2)/abs(I1) < 1e-5
+@test abs(I1-I2)/abs(I1) < 1e-10

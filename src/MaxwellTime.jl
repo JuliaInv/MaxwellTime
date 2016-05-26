@@ -18,20 +18,22 @@ module MaxwellTime
 		Obs::AbstractArray{Float64}
 		dt::Vector{Float64}
 		wave::Vector{Float64}
+		EMsolver::Union{AbstractSolver,Array}
+		DCsolver::AbstractSolver
+		storeDCfactors::Bool
 		fields::Array{Float64}
-		fname::AbstractString
-		solver::AbstractSolver
 	end
 	function getMaxwellTimeParam(M::AbstractMesh,
 				  Sources,
 				  Obs,
 				  dt,
 				  wave,
-				  solver;
-				  fields=Array(Float64,0,0),
-	          	  fname="")
+				  EMsolver::Union{AbstractSolver,Array}=getMUMPSsolver(),
+				  DCsolver::AbstractSolver=getMUMPSsolver(),
+				  storeDCfactors::Bool=true)
 
-		return MaxwellTimeParam(M,Sources,Obs,dt,wave,fields,fname,solver)
+		return MaxwellTimeParam(M,Sources,Obs,dt,wave,EMsolver,
+		                        DCsolver,storeDCfactors,Float64[])
 	end
 
 	#Maxwell Time domain with BDF-2 time stepping
@@ -61,7 +63,7 @@ module MaxwellTime
 
 		return MaxwellTimeBDF2Param(M,Sources,Obs,dt,nt,wave,
 		         EMsolver,storeEMfactors,getMUMPSsolver(),
-		         false,zeros(0),zeros(0))
+		         false,Float64[],Float64[])
 	end
 	
 	function getMaxwellTimeBDF2Param(M::AbstractMesh,
@@ -71,13 +73,13 @@ module MaxwellTime
 				nt::Int64,
 				wave::Vector{Float64},
 				EMsolver::AbstractSolver=getMUMPSsolver(),
-				storeEMfactors::Bool=false,
+				storeEMfactors::Bool=true,
 				DCsolver::AbstractSolver=getMUMPSsolver(),
-				storeDCfactors::Bool=false)
+				storeDCfactors::Bool=true)
 
 	return MaxwellTimeBDF2Param(M,Sources,Obs,dt,nt,wave,
 	         EMsolver,storeEMfactors,DCsolver,storeDCfactors,
-	         zeros(0),zeros(0))
+	         Float64[],Float64[])
 	end
 	
 	#Maxwell Time domain with TR-BDF2 time stepping

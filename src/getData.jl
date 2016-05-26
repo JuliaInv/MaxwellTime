@@ -15,9 +15,36 @@ function getData(sigma::Array{Float64,1},param::MaxwellTimeParam)
 	dt       = param.dt
 	wave     = param.wave
 	Msh      = param.M
-	mySolver = param.solver
-	
+	EMsolver = param.EMsolver
+	DCsolver = param.DCsolver
+	storeDCf = param.storeDCfactors
 
+# 	if storeEMf && ~(typeof(EMsolver) <: Array)
+# 	  error("getData: Must supply vector of solver objects in order to store factorizations")
+# 	end
+# 	
+# 	if ~storeEMf && (typeof(EMsolver) <: Array)
+# 	  error("getData: incompatible storeEMfactors and EMsolver settings. Factorizations will be stored when EMsolver is array")
+# 	end
+	
+	if (typeof(EMsolver) <: Array)
+	  ndt = 1
+	  for i = 2:length(dt)
+	    if dt[i] != dt[i-1]
+	      ndt += 1
+	    end
+	  end
+	  if ndt != length(EMsolver)
+	    error("getData: Length of solver array does not match number of step-size changes")
+	  end
+	  for i = 1:ndt
+	    EMsolver[i].doClear = 1
+	  end
+	  
+	else
+	  EMsolver.doClear = 1
+	end
+	
 	mu    = 4*pi*1e-7	
 	Curl  = getCurlMatrix(Msh)
 	Msig  = getEdgeMassMatrix(Msh,vec(sigma))
@@ -33,12 +60,7 @@ function getData(sigma::Array{Float64,1},param::MaxwellTimeParam)
         Msig  = Ne'*Msig*Ne
         s     = Ne'*copy(param.Sources)
         P     = Ne'*param.Obs
-#         G     = Ne'*G*Nn
-#         Curl  = Curl*Ne
-#         Msig  = Ne'*Msig*Ne
-#         s     = Ne'*copy(param.Sources)
-#         P     = Ne'*param.Obs
-      
+
 	# allocate space for fields
 	numSrc = size(s,2)
         #numSrc  = size(b0,2)
@@ -49,30 +71,31 @@ function getData(sigma::Array{Float64,1},param::MaxwellTimeParam)
 	#Compute e0. Check divergence first to determine source type
 	if any( abs(G'*s) .> 1e-12)
 	  groundedSource = true
+	  DCsolver.doClear = 1
 	  Adc = G'*Msig*G
-	  phi0,mySolver = solveLinearSystem(Adc,G'*s,mySolver,1,0)
+	  phi0,DCsolver = solveDC!(Adc,G'*s,DCsolver)
 	  ew[:,:,1] = -G*phi0
-	  clear!(mySolver)
+	  DCsolver.doClear = 0
+	  if ~storeDCf
+	    clear!(DCsolver)
+	    DCsolver.doClear = 1
+	  end
 	else
 	  groundedSource = false
 	end
 	
 	# time step
-	dtLast = 0.0
 	A = []
+	nFacs = 0
 	for i=1:length(dt)
             dtinv = 1.0/dt[i]
             rhs = dtinv*(Msig*ew[:,:,i]+(wave[i]-wave[i+1])*s)
-            if (dt[i] != dtLast)
-              mySolver.doClear = 1
+            if ( (i==1) || (dt[i] != dt[i-1]) )
               A = Curl'*Mmu*Curl + dtinv*Msig
+              nFacs += 1
             end
-            ew[:,:,i+1],mySolver = solveMaxTime(A,rhs,Msig,Msh,dt[i],mySolver)
-	    mySolver.doClear = 0
-	    dtLast = dt[i]
+            ew[:,:,i+1],EMsolver = solveMaxTime!(A,rhs,Msig,Msh,dt,i,nFacs,EMsolver)
 	end
-	clear!(mySolver)
-        mySolver.doClear = 1
 	
 	# compute the data
 	#Note (for grounded sources) that DC data
@@ -134,7 +157,6 @@ function getData(sigma::Array{Float64,1},param::MaxwellTimeBDF2Param)
 	  groundedSource   = true
 	  DCsolver.doClear = 1
 	  Adc              = G'*Msig*G
-	  #phi0,mySolver    = solveLinearSystem(Adc,full(G'*s),DCsolver,1,0)
 	  phi0,DCSolver    = solveDC!(Adc,G'*s,DCsolver)
 	  ew[:,:,1]        = -G*phi0
 	  DCsolver.doClear = 0
