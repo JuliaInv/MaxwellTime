@@ -1,7 +1,8 @@
 using MaxwellTime
 using Base.Test
 
-# write your own tests here
+include("maxTime-derivative-test.jl")
+
 println(" ")
 println("==========  Test BE sensitivities Ind Src ======================")
 println(" ")

@@ -73,7 +73,7 @@ function getData(sigma::Array{Float64,1},param::MaxwellTimeParam)
 	  groundedSource = true
 	  DCsolver.doClear = 1
 	  Adc = G'*Msig*G
-	  phi0,DCsolver = solveDC!(Adc,G'*s,DCsolver)
+	  phi0,DCsolver = solveDC!(Adc,wave[1]*G'*s,DCsolver)
 	  ew[:,:,1] = -G*phi0
 	  DCsolver.doClear = 0
 	  if ~storeDCf

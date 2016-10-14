@@ -12,16 +12,16 @@ module MaxwellTime
 	export ForwardProbType
 
 	#Maxwell time domain with backward Euler
-	type MaxwellTimeParam <: ForwardProbType
+	type MaxwellTimeParam{S<:Real} <: ForwardProbType
 		M::AbstractMesh
-		Sources::AbstractArray{Float64}
-		Obs::AbstractArray{Float64}
-		dt::Vector{Float64}
-		wave::Vector{Float64}
+		Sources::AbstractArray{S}
+		Obs::AbstractArray{S}
+		dt::Vector{S}
+		wave::Vector{S}
 		EMsolver::Union{AbstractSolver,Array}
 		DCsolver::AbstractSolver
 		storeDCfactors::Bool
-		fields::Array{Float64}
+		fields::Array{S}
 	end
 	function getMaxwellTimeParam(M::AbstractMesh,
 				  Sources,
@@ -37,41 +37,28 @@ module MaxwellTime
 	end
 
 	#Maxwell Time domain with BDF-2 time stepping
-	type MaxwellTimeBDF2Param <: ForwardProbType
+	type MaxwellTimeBDF2Param{S<:Real} <: ForwardProbType
 		M::AbstractMesh
-		Sources::AbstractArray{Float64}
-		Obs::AbstractArray{Float64}
-		dt::Float64
+		Sources::AbstractArray{S}
+		Obs::AbstractArray{S}
+		dt::S
 		nt::Int64
-		wave::Vector{Float64}
+		wave::Vector{S}
 		EMsolver::AbstractSolver
 		storeEMfactors::Bool
 		DCsolver::AbstractSolver
 		storeDCfactors::Bool
-		fields::Array{Float64}
-		ehat::Array{Float64}
+		fields::Array{S}
+		ehat::Array{S}
 	end
 	
-	function getMaxwellTimeBDF2Param(M::AbstractMesh,
-					Sources::AbstractArray{Float64},
-					Obs::AbstractArray{Float64},
-					dt::Float64,
-					nt::Int64,
-					wave::Vector{Float64},
-					EMsolver::AbstractSolver=getMUMPSsolver(),
-					storeEMfactors::Bool=false)
-
-		return MaxwellTimeBDF2Param(M,Sources,Obs,dt,nt,wave,
-		         EMsolver,storeEMfactors,getMUMPSsolver(),
-		         false,Float64[],Float64[])
-	end
 	
-	function getMaxwellTimeBDF2Param(M::AbstractMesh,
-				Sources::AbstractArray{Float64},
-				Obs::AbstractArray{Float64},
-				dt::Float64,
+	function getMaxwellTimeBDF2Param{S<:Real}(M::AbstractMesh,
+				Sources::AbstractArray{S},
+				Obs::AbstractArray{S},
+				dt::S,
 				nt::Int64,
-				wave::Vector{Float64},
+				wave::Vector{S},
 				EMsolver::AbstractSolver=getMUMPSsolver(),
 				storeEMfactors::Bool=true,
 				DCsolver::AbstractSolver=getMUMPSsolver(),
@@ -79,18 +66,18 @@ module MaxwellTime
 
 	return MaxwellTimeBDF2Param(M,Sources,Obs,dt,nt,wave,
 	         EMsolver,storeEMfactors,DCsolver,storeDCfactors,
-	         Float64[],Float64[])
+	         S[],S[])
 	end
 	
 	#Maxwell Time domain with TR-BDF2 time stepping
-	type MaxwellTimeTRBDF2Param <: ForwardProbType
+	type MaxwellTimeTRBDF2Param{S<:Real} <: ForwardProbType
 		M::AbstractMesh
-		Sources::AbstractArray{Float64}
-		Obs::AbstractArray{Float64}
-		dt::Float64
+		Sources::AbstractArray{S}
+		Obs::AbstractArray{S}
+		dt::S
 		nt::Int64
-		wave::Vector{Float64}
-		fields::Array{Float64}
+		wave::Vector{S}
+		fields::Array{S}
 		fname::AbstractString
 		solver::AbstractSolver
 	end
@@ -110,14 +97,14 @@ module MaxwellTime
 	
 	# Maxwell Time domain with explicit sensitivity storage
 	export MaxwellTimeSEParam, getMaxwellTimeSEParam
-	type MaxwellTimeSEParam <: ForwardProbType
+	type MaxwellTimeSEParam{S<:Real} <: ForwardProbType
 		M::AbstractMesh
-		Sources::AbstractArray{Float64}
-		Obs::AbstractArray{Float64}
-		dt::Vector{Float64}
-		wave::Vector{Float64}
-		Sens::Array{Float64}
-		fields::Array{Float64}
+		Sources::AbstractArray{S}
+		Obs::AbstractArray{S}
+		dt::Vector{S}
+		wave::Vector{S}
+		Sens::Array{S}
+		fields::Array{S}
 		fname::AbstractString
 		solver::AbstractSolver
 	end # type MaxwellTimeSEParam
@@ -142,8 +129,6 @@ module MaxwellTime
 	include("getData.jl")
 	include("getSensMatVec.jl")
 	include("getSensTMatVec.jl")
-	include("magnetostaticsCurrentPoly.jl")
-        include("getDataAlt.jl")
         include("solveMaxTime.jl")
         include("solveDC.jl")
 	

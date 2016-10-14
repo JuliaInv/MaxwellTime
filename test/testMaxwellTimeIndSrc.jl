@@ -43,12 +43,6 @@ for i=1:ns
 			     pc[1]-10+flightPath[i]  pc[2]-10   pc[3]] 
 
 
-# 	a1           = magnetostaticsCurrentPoly(Xe1, p)
-# 	a2           = magnetostaticsCurrentPoly(Xe2, p)
-# 	a3           = magnetostaticsCurrentPoly(Xe3, p)
-# 	a            = [a1[:,1]; a2[:,2]; a3[:,3]] 
-# 	Sources[:,i] = 1e8*Curl*a
-
 	# Define receivers
 	P[:,i]       = getEdgeIntegralOfPolygonalChain(M,p,EX,EY,EZ)
         Sources[:,i] = P[:,i]
@@ -80,7 +74,7 @@ function f(sigdum)
 end
   
 df(zdum,sigdum) = getSensMatVec(zdum,sigdum,pFor)
-pass,Error,Order = checkDerivative(f,df,sigma;nSuccess=5,v=z)
+pass,Error,Order = checkDerivativeMax(f,df,sigma;nSuccess=5,v=z)
 @test pass
 
 

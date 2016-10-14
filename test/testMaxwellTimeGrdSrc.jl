@@ -148,7 +148,7 @@ function f(sigdum)
 end
   
 df(zdum,sigdum) = getSensMatVec(zdum,sigdum,pFor)
-pass,Error,Order = checkDerivative(f,df,sigma;nSuccess=5)
+pass,Error,Order = checkDerivativeMax(f,df,sigma;nSuccess=5)
 @test pass
 
 
