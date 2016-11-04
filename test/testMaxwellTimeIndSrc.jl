@@ -62,7 +62,7 @@ D,pFor = getData(sigma,pFor);
 toc()
 
 println(" ")
-println("==========  Derivative Test ======================")
+println("==========  Derivative Test -- implicit sensitivities ======================")
 println(" ")
 
 z = rand(size(sigma))*1e-1
@@ -77,6 +77,19 @@ df(zdum,sigdum) = getSensMatVec(zdum,sigdum,pFor)
 pass,Error,Order = checkDerivativeMax(f,df,sigma;nSuccess=5,v=z)
 @test pass
 
+println("==========  Derivative Test -- explicit sensitivities ======================")
+println(" ")
+
+pForSE = getMaxwellTimeSEParam(M,Sources,P,dt,wave)
+
+function f(sigdum)
+  d, = getData(sigdum,pForSE)
+  return d
+end
+  
+df(zdum,sigdum) = getSensMatVec(zdum,sigdum,pForSE)
+pass,Error,Order = checkDerivativeMax(f,df,sigma;nSuccess=5,v=z)
+@test pass
 
 println(" ")
 println("==========  Adjoint Test ======================")

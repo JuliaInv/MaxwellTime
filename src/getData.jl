@@ -318,7 +318,8 @@ function getData(sigma::Array{Float64,1},param::MaxwellTimeSEParam)
 # b_t =  -Curl*e
 # (Curl'*Mmuinv*Curl + 1/dt*Msig)*en = - 1/dt*Msig*e_{n-1} + s(n+1)
 #
-	tempParam = getMaxwellTimeParam(param.M,param.Sources,param.Obs, param.dt, param.wave)
+	tempParam = getMaxwellTimeParam(param.M,param.Sources,param.Obs, param.dt, param.wave,
+	                                param.EMsolver,param.DCsolver,param.storeDCfactors)
 	param.Sens=[]
 	D,tempParam = getData(sigma,tempParam)
 	param.fields = tempParam.fields

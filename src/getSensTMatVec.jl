@@ -249,7 +249,8 @@ end
 function getSensTMatVec(z::Vector{Float64},sigma::Vector{Float64},
                         param::MaxwellTimeSEParam)	
 	if isempty(param.Sens)
-		tempParam = getMaxwellTimeParam(Msh,param.Sources,param.Obs, param.dt, param.wave,fields = param.fields)
+		tempParam = getMaxwellTimeParam(param.M,param.Sources,param.Obs, param.dt, param.wave,
+	                                param.EMsolver,param.DCsolver,param.storeDCfactors)
 		# compute sensitivity matrix
 		nt = length(param.dt)
 		ns = size(param.Sources,2)
@@ -260,7 +261,7 @@ function getSensTMatVec(z::Vector{Float64},sigma::Vector{Float64},
 			v      = zeros(nt*ns*nr)
 			v[k]   = 1.0
 			JTv    = getSensTMatVec(v,sigma,tempParam)
-			J[k,:] = vec(JTv)'
+			J[k,:] = vec(JTv)
 		end
 		param.Sens = J
 		param.fields=[]

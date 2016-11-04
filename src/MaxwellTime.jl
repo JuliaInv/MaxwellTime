@@ -103,23 +103,24 @@ module MaxwellTime
 		Obs::AbstractArray{S}
 		dt::Vector{S}
 		wave::Vector{S}
+		EMsolver::Union{AbstractSolver,Array}
+		DCsolver::AbstractSolver
+		storeDCfactors::Bool
 		Sens::Array{S}
 		fields::Array{S}
-		fname::AbstractString
-		solver::AbstractSolver
 	end # type MaxwellTimeSEParam
 	
 	function getMaxwellTimeSEParam(M::AbstractMesh,
-										  Sources,
-										  Obs,
-										  dt,
-										  wave,
-										  solver;
-										  Sens=Array(Float64,0,0),
-										  fields=Array(Float64,0,0),
-							          	  fname="")
+				       Sources,
+                                       Obs,
+                                       dt,
+                                       wave,
+                                       EMsolver::Union{AbstractSolver,Array}=getMUMPSsolver(),
+                                       DCsolver::AbstractSolver=getMUMPSsolver(),
+				       storeDCfactors::Bool=true)
 
-		return MaxwellTimeSEParam(M,Sources,Obs,dt,wave,Sens,fields,fname,solver)
+		return MaxwellTimeSEParam(M,Sources,Obs,dt,wave,EMsolver,
+		                          DCsolver,storeDCfactors,Float64[],Float64[])
 	end
 	
 	import jInv.ForwardShare.getData
