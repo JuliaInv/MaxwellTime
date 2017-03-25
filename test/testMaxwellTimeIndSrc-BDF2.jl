@@ -30,7 +30,6 @@ flightPath = -1000:500:1000
 ns         = length(flightPath)
 nr         = ns
 Curl       = getCurlMatrix(M)
-EX, EY, EZ = getEdgeNumbering(M)
 
 Sources = zeros(size(Curl,2),ns)
 P       = spzeros(size(Curl,2),ns)
@@ -52,7 +51,7 @@ for i=1:ns
 # 	Sources[:,i] = 1e8*Curl*a
 
 	# Define receivers
-	P[:,i]       = getEdgeIntegralOfPolygonalChain(M,p,EX,EY,EZ)
+	P[:,i]       = getEdgeIntegralOfPolygonalChain(M,p)
         Sources[:,i] = P[:,i]
 end
 

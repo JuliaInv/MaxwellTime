@@ -1,5 +1,7 @@
 export checkDerivativeMax
 
+import jInv.Utils.getRandomTestDirection
+
 function checkDerivativeMax(f::Function,df::Function,x0;kwargs...)
 	function testFun(x,v=[])
 		if !(isempty(v))
@@ -11,13 +13,6 @@ function checkDerivativeMax(f::Function,df::Function,x0;kwargs...)
 	return checkDerivativeMax(testFun,x0;kwargs...)
 end
 
-function getRandomTestDirection(x0::Float64)
-	return randn()
-end
-
-function getRandomTestDirection(x0::Array{Float64})
-	return randn(size(x0))
-end
 
 function checkDerivativeMax(f::Function,x0;out::Bool=true,tol::Float64=1.9,nSuccess::Int=3,v=getRandomTestDirection(x0))
 # checkDerivative(f::Function,x0;out::Bool=true,tol::Float64=1.9,nSuccess::Int=3)

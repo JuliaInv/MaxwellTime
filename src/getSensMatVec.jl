@@ -23,14 +23,14 @@ function getSensMatVec(z::Vector{Float64},sigma::Vector{Float64},
 	storeDCf = param.storeDCfactors
 	ew       = param.fields
 	
-	mu   = 4*pi*1e-7  # magnetic permeability
-	Curl = getCurlMatrix(Msh)
-	Gin  = getNodalGradientMatrix(Msh)
-	Msig = getEdgeMassMatrix(Msh,vec(sigma))
-	Mmu  = getFaceMassMatrix(Msh,vec(zeros(size(sigma)).+1/mu))
-        Ne,Qe = getEdgeConstraints(Msh)
-        Nn,Qn = getNodalConstraints(Msh)
-        Nf,Qf = getFaceConstraints(Msh)
+	mu     = 4*pi*1e-7  # magnetic permeability
+	Curl   = getCurlMatrix(Msh)
+	Gin    = getNodalGradientMatrix(Msh)
+	Msig   = getEdgeMassMatrix(Msh,vec(sigma))
+	Mmu    = getFaceMassMatrix(Msh,vec(zeros(size(sigma)).+1/mu))
+        Ne,Qe, = getEdgeConstraints(Msh)
+        Nn,Qn  = getNodalConstraints(Msh)
+        Nf,Qf  = getFaceConstraints(Msh)
 	
 	Curl = Qf*Curl*Ne
 	Msig = Ne'*Msig*Ne
@@ -126,14 +126,14 @@ function getSensMatVec(z::Vector{Float64},sigma::Vector{Float64},
 	ew       = param.fields
 	ehat     = param.ehat
 	
-	mu    = 4*pi*1e-7  # magnetic permeability
-	Curl  = getCurlMatrix(Msh)
-	Gin   = getNodalGradientMatrix(Msh)
-	Msig  = getEdgeMassMatrix(Msh,vec(sigma))
-	Mmu   = getFaceMassMatrix(Msh,vec(zeros(size(sigma)).+1/mu))
-        Ne,Qe = getEdgeConstraints(Msh)
-        Nn,Qn = getNodalConstraints(Msh)
-        Nf,Qf = getFaceConstraints(Msh)
+	mu     = 4*pi*1e-7  # magnetic permeability
+	Curl   = getCurlMatrix(Msh)
+	Gin    = getNodalGradientMatrix(Msh)
+	Msig   = getEdgeMassMatrix(Msh,vec(sigma))
+	Mmu    = getFaceMassMatrix(Msh,vec(zeros(size(sigma)).+1/mu))
+        Ne,Qe, = getEdgeConstraints(Msh)
+        Nn,Qn  = getNodalConstraints(Msh)
+        Nf,Qf  = getFaceConstraints(Msh)
 	
 	Curl = Qf*Curl*Ne
 	Msig = Ne'*Msig*Ne

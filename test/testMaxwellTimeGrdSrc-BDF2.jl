@@ -29,12 +29,11 @@ nn   = size(Xn,1)
 # 
 # #First test that sensitivities from getSensMatVec and getSensTMatVec
 # #Match those computed from explicitly constructing J.
-nEx,nEy,nEz = getEdgeNumbering(Msh)
 Sources = zeros(ne)
 Tx = [1792.0 2048.0 1024.0;
       2048.0 2048.0 1024.0;]   
 
-Sources = getEdgeIntegralOfPolygonalChain(Msh,Tx,nEx,nEy,nEz)
+Sources = getEdgeIntegralOfPolygonalChain(Msh,Tx)
 
 #Setup receivers
 Iobs = round(Integer,ceil(Msh.ne[1]*rand(16)))
@@ -150,7 +149,7 @@ Tx[:,:,2] = [2048.0 2304.0 1024.0;
              2304.0 2304.0 1024.0;]
        
 for i=1:ns
-  Sources[:,i] = getEdgeIntegralOfPolygonalChain(Msh,Tx[:,:,i],nEx,nEy,nEz)
+  Sources[:,i] = getEdgeIntegralOfPolygonalChain(Msh,Tx[:,:,i])
 end
 
 #Get data at initial model

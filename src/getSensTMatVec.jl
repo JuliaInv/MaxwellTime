@@ -20,20 +20,20 @@ function getSensTMatVec(z::Array{Float64,1},sigma::Array{Float64,1},
 	ew       = param.fields
 	
 	
-	Curl  = getCurlMatrix(Msh)
-	Gin   = getNodalGradientMatrix(Msh)
-	Msig  = getEdgeMassMatrix(Msh,vec(sigma))
-	Mmu   = getFaceMassMatrix(Msh,vec(zeros(size(sigma)).+1/mu))
-        Ne,Qe = getEdgeConstraints(Msh)
-        Nn,Qn = getNodalConstraints(Msh)
-        Nf,Qf = getFaceConstraints(Msh)
+	Curl   = getCurlMatrix(Msh)
+	Gin    = getNodalGradientMatrix(Msh)
+	Msig   = getEdgeMassMatrix(Msh,vec(sigma))
+	Mmu    = getFaceMassMatrix(Msh,vec(zeros(size(sigma)).+1/mu))
+        Ne,Qe, = getEdgeConstraints(Msh)
+        Nn,Qn  = getNodalConstraints(Msh)
+        Nf,Qf  = getFaceConstraints(Msh)
 	
 	Curl = Qf*Curl*Ne
 	Msig = Ne'*Msig*Ne
 	Mmu  = Nf'*Mmu*Nf
 	G    = Qe*Gin*Nn
-	s     = Ne'*param.Sources
-        P     = Ne'*param.Obs
+	s    = Ne'*param.Sources
+        P    = Ne'*param.Obs
 
 	nt = length(dt)
 	ns = size(s,2)
@@ -135,20 +135,20 @@ function getSensTMatVec(z::Array{Float64,1},sigma::Array{Float64,1},
 	ew       = param.fields
 	ehat     = param.ehat
 	
-	Curl  = getCurlMatrix(Msh)
-	Gin   = getNodalGradientMatrix(Msh)
-	Msig  = getEdgeMassMatrix(Msh,vec(sigma))
-	Mmu   = getFaceMassMatrix(Msh,vec(zeros(size(sigma)).+1/mu))
-        Ne,Qe = getEdgeConstraints(Msh)
-        Nn,Qn = getNodalConstraints(Msh)
-        Nf,Qf = getFaceConstraints(Msh)
+	Curl   = getCurlMatrix(Msh)
+	Gin    = getNodalGradientMatrix(Msh)
+	Msig   = getEdgeMassMatrix(Msh,vec(sigma))
+	Mmu    = getFaceMassMatrix(Msh,vec(zeros(size(sigma)).+1/mu))
+        Ne,Qe, = getEdgeConstraints(Msh)
+        Nn,Qn  = getNodalConstraints(Msh)
+        Nf,Qf  = getFaceConstraints(Msh)
 	
 	Curl = Qf*Curl*Ne
 	Msig = Ne'*Msig*Ne
 	Mmu  = Nf'*Mmu*Nf
 	G    = Qe*Gin*Nn
-	s     = Ne'*param.Sources
-        P     = Ne'*param.Obs
+	s    = Ne'*param.Sources
+        P    = Ne'*param.Obs
 
 	nt = param.nt
 	ns = size(s,2)

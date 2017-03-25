@@ -28,12 +28,11 @@ nn   = size(Xn,1)
 
 #First test that sensitivities from getSensMatVec and getSensTMatVec
 #Match those computed from explicitly constructing J.
-nEx,nEy,nEz = getEdgeNumbering(Msh)
 Sources = zeros(ne)
 Tx = [1792.0 2048.0 1024.0;
       2048.0 2048.0 1024.0;]   
 
-Sources = getEdgeIntegralOfPolygonalChain(Msh,Tx,nEx,nEy,nEz)
+Sources = getEdgeIntegralOfPolygonalChain(Msh,Tx)
 
 #Setup receivers
 Iobs = round(Integer,ceil(Msh.ne[1]*rand(16)))
@@ -59,14 +58,14 @@ ew     = pFor.fields
 
 #Form sensitivity matrix and related quantities
 println("Forming sensitivity matrix")
-mu    = 4*pi*1e-7  # magnetic permeability
-Curl  = getCurlMatrix(Msh)
-G     = getNodalGradientMatrix(Msh)
-Msig  = getEdgeMassMatrix(Msh,vec(sigma))
-Mmu   = getFaceMassMatrix(Msh,vec(zeros(size(sigma)).+1/mu))
-Ne,Qe = getEdgeConstraints(Msh)
-Nn,Qn = getNodalConstraints(Msh)
-Nf,Qf = getFaceConstraints(Msh)
+mu     = 4*pi*1e-7  # magnetic permeability
+Curl   = getCurlMatrix(Msh)
+G      = getNodalGradientMatrix(Msh)
+Msig   = getEdgeMassMatrix(Msh,vec(sigma))
+Mmu    = getFaceMassMatrix(Msh,vec(zeros(size(sigma)).+1/mu))
+Ne,Qe, = getEdgeConstraints(Msh)
+Nn,Qn  = getNodalConstraints(Msh)
+Nf,Qf  = getFaceConstraints(Msh)
 
 Curl = Qf*Curl*Ne
 Msig = Ne'*Msig*Ne
@@ -121,7 +120,6 @@ println("Testing multiple sources")
 
 #setup e-dipole sources
 ns = 2
-nEx,nEy,nEz = getEdgeNumbering(Msh)
 Tx = zeros(2,3,ns)
 Sources = zeros(ne,ns)
 Tx[:,:,1] = [1792.0 2048.0 1024.0;
@@ -130,7 +128,7 @@ Tx[:,:,2] = [2048.0 2048.0 1024.0;
              2304.0 2048.0 1024.0;]
        
 for i=1:ns
-  Sources[:,i] = getEdgeIntegralOfPolygonalChain(Msh,Tx[:,:,i],nEx,nEy,nEz)
+  Sources[:,i] = getEdgeIntegralOfPolygonalChain(Msh,Tx[:,:,i])
 end
 
 #Get data at initial model
