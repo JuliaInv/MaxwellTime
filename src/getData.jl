@@ -1,327 +1,129 @@
 export getData
 
-function getData(sigma::Array{Float64,1},param::MaxwellTimeParam)
-#function getData(sigma,param)
-
-# Solve the Backward Euler system
-# Curl*e + b_t = 0
-# Curl'*(Mmuinv*b) - Msig*e = s(t)
-#
-# By eliminating b and solving for e
-# b_t =  -Curl*e
-# (Curl'*Mmuinv*Curl + 1/dt*Msig)*e_{n+1} = - 1/dt*(Msig*e_{n} + s_n - s_{n+1})
-#
-
-	dt       = param.dt
-	wave     = param.wave
-	Msh      = param.M
-	EMsolver = param.EMsolver
-	DCsolver = param.DCsolver
-	storeDCf = param.storeDCfactors
-
-# 	if storeEMf && ~(typeof(EMsolver) <: Array)
-# 	  error("getData: Must supply vector of solver objects in order to store factorizations")
-# 	end
-# 	
-# 	if ~storeEMf && (typeof(EMsolver) <: Array)
-# 	  error("getData: incompatible storeEMfactors and EMsolver settings. Factorizations will be stored when EMsolver is array")
-# 	end
-	
-	if (typeof(EMsolver) <: Array)
-	  ndt = 1
-	  for i = 2:length(dt)
-	    if dt[i] != dt[i-1]
-	      ndt += 1
-	    end
-	  end
-	  if ndt != length(EMsolver)
-	    error("getData: Length of solver array does not match number of step-size changes")
-	  end
-	  for i = 1:ndt
-	    EMsolver[i].doClear = 1
-	  end
-	  
-	else
-	  EMsolver.doClear = 1
-	end
-	
-	mu     = 4*pi*1e-7	
-	Curl   = getCurlMatrix(Msh)
-	Msig   = getEdgeMassMatrix(Msh,vec(sigma))
-	Mmu    = getFaceMassMatrix(Msh,1/mu*ones(size(sigma)))
-        Ne,Qe, = getEdgeConstraints(Msh)
-        G      = getNodalGradientMatrix(Msh)
-        Nn,Qn  = getNodalConstraints(Msh)
-        Nf,Qf  = getFaceConstraints(Msh)
-        
-        G     = Qe*G*Nn
-        Curl  = Qf*Curl*Ne
-        Mmu   = Nf'*Mmu*Nf
-        Msig  = Ne'*Msig*Ne
-        s     = Ne'*copy(param.Sources)
-        P     = Ne'*param.Obs
-
-	# allocate space for fields
-	numSrc = size(s,2)
-        #numSrc  = size(b0,2)
-	ew = zeros(size(Ne,2),numSrc,length(dt)+1);
-	#e0   = Msig\(Curl'*Mmu*b0)
-	#ew[:,:,1] = wave[1]*Ne'*e0
-
-	#Compute e0. Check divergence first to determine source type
-	if any( abs(G'*s) .> 1e-12)
-	  groundedSource = true
-	  DCsolver.doClear = 1
-	  Adc = G'*Msig*G
-	  phi0,DCsolver = solveDC!(Adc,wave[1]*G'*s,DCsolver)
-	  ew[:,:,1] = -G*phi0
-	  DCsolver.doClear = 0
-	  if ~storeDCf
-	    clear!(DCsolver)
-	    DCsolver.doClear = 1
-	  end
-	else
-	  groundedSource = false
-	end
-	
-	# time step
-	A = []
-	nFacs = 0
-	for i=1:length(dt)
-            dtinv = 1.0/dt[i]
-            rhs = dtinv*(Msig*ew[:,:,i]+(wave[i]-wave[i+1])*s)
-            if ( (i==1) || (dt[i] != dt[i-1]) )
-              A = Curl'*Mmu*Curl + dtinv*Msig
-              nFacs += 1
-            end
-            ew[:,:,i+1],EMsolver = solveMaxTime!(A,rhs,Msig,Msh,dt,i,nFacs,EMsolver)
-	end
-	
-	# compute the data
-	#Note (for grounded sources) that DC data
-	#Are computed as the integral of electric field over a receiver
-	#dipole and not as a potential difference
-	if groundedSource
-	  D = zeros(size(P,2),numSrc,length(dt)+1)
-	  D[:,:,1] = P'*ew[:,:,1]
-	  offset = 1
-	else
-	  D = zeros(size(P,2),numSrc,length(dt))
-	  offset = 0
-	end
-	for i=1:length(dt)
-		D[:,:,i+offset] = P'*ew[:,:,i+1]
-	end
-	param.fields = ew
-	
-	return D, param
+# For backward compatibility and convenience if first argument to getData
+# is a vector of real numbers and not an object of type MaxwellTimeModel
+# then assume first argument is conductivity and set permeability mu=mu0
+function getData{S<:Real}(sigma::Vector{S},param::MaxwellTimeParam)
+    m = MaxwellTimeModel(sigma,fill(4*pi*1e-7,param.M.nc))
+    return getData(m,param)
 end
 
-#--------------------------------------------------------------------
 
-function getData(sigma::Array{Float64,1},param::MaxwellTimeBDF2Param)
-  #function getData(sigma,param)
-  #Use BDF2 backward differentiation formula for second order time-stepping
-	dt       = param.dt
-	nt       = param.nt
-	wave     = param.wave
-	Msh      = param.M
-	EMsolver = param.EMsolver
-	storeEMf = param.storeEMfactors
-	DCsolver = param.DCsolver
-	storeDCf = param.storeDCfactors
-	
+"""
+function getData(model::MaxwellTimeModel,param::MaxwellTimeParam)
 
-	mu     = 4*pi*1e-7	
-	Curl   = getCurlMatrix(Msh)
-	Msig   = getEdgeMassMatrix(Msh,vec(sigma))
-	Mmu    = getFaceMassMatrix(Msh,1/mu*ones(size(sigma)))
-        Ne,Qe, = getEdgeConstraints(Msh)
-        G      = getNodalGradientMatrix(Msh)
-        Nn,Qn  = getNodalConstraints(Msh)
-        Nf,Qf  = getFaceConstraints(Msh)
+Given electrical conductivity and magnetic permeability models, compute the
+electric field at requested time steps, store the fields in param, and
+return data and param.
+
+Input:
+
+      model::MaxwellTimeModel--Composite type containing conductivity 
+                               and permeability. Conductivity can be isotropic,
+                               diagonally anisotropic or generally anisotropic.
+                               Permeability may be isotropic or diagonally
+                               anisotropic.
+      param::MaxwellTimeParam--Contains structures and information needed to 
+                               construct and solve Maxwell's equations such
+                               as a mesh, a source, and time steps. For a full
+                               description see the MaxwellTimeParam documentation.
+                               
+      
+      Output: 
+      
+             D::Array--Data, computed by applying the observation matrix
+                       to the electric fields at each time step. For more
+                       information on the observation matrix see the
+                       MaxwellTimeParam documentation.
+                       
+             param::MaxwellTimeParam--param is returned modified. It may store
+                    matrix factorizations and the electric fields for further
+                    use in sensitivity computations.
+"""
+function getData(model::MaxwellTimeModel,param::MaxwellTimeParam)
+#function getData(sigma,param)   
         
-        G     = Qe*G*Nn
-        Curl  = Qf*Curl*Ne
-        Mmu   = Nf'*Mmu*Nf
-        Msig  = Ne'*Msig*Ne
-        s     = Ne'*copy(param.Sources)
-        P     = Ne'*param.Obs
+    # Unpack model into conductivity and magnetic permeability
+    sigma = model.sigma
+    mu    = model.mu
+    
+    #Unpack param
+    M             = param.M
+    sourceType    = param.sourceType
+    storageLevel  = param.storageLevel
+    EMsolver      = param.EMsolvers   
+    dt            = param.dt
+    
+    # Check model input 
+    in(length(sigma),[M.nc; 3*M.nc; 6*M.nc]) || error("MaxwellTime.getData: Invalid length of sigma")
+    if length(mu) == 6*M.nc
+        error("MaxwellTime.getData: Generally anisotropic permeability not supported")
+    elseif ~in(length(mu),[M.nc; 3*M.nc])
+        error("MaxwellTime.getData: Invalid length of mu")
+    end
+
+    # If explicit sensitivities are being used, clear them
+    if param.sensitivityMethod == :Explicit
+        param.Sens = Array{eltype(sigma),2}() #Empty 2D array
+    end
+    
+    # Form conductivity edge mass matrix
+    Ne,Qe, = getEdgeConstraints(M)
+    Msig   = getEdgeMassMatrix(M,sigma)
+    Msig   = Ne'*Msig*Ne
+    
+    # Form K = Curl'*Mmu*Curl
+    K = getMaxwellCurlCurlMatrix(M,mu)
+    
+    # Restrict source to active (not hanging) edges
+    s = Ne'*param.Sources
+    
+    # Initialize electric field storage
+    ne            = size(Ne,2) #Number of active edges
+    ns            = size(s,2)
+    nt            = length(dt)+1
+    param.fields  = zeros(eltype(s),ne,ns,nt)
+    e             = param.fields
+    
+    # Initialize matrix storage if needed. Note that if a direct solver is
+    # being used and factorizatons are being stored, then matrices don't 
+    # need to be stored
+    if storageLevel == :Matrices
+        param.Matrices = Vector{SparseMatrixCSC{eltype(G.nzval),eltype(G.colptr)}}()
+        Matrices       = param.Matrices
+    end
+    
+    # Get initial fields. They're zero for inductive sources
+    if sourceType == :Galvanic
+        param = getFieldsDC(Msig,s,param)
+    end
         
-        # allocate space for fields
-	numSrc = size(s,2)
-	ew = zeros(size(Ne,2),numSrc,nt+1);
-
-	#Compute e_0. Check divergence first to determine source type
-	if any( abs(G'*s) .> 1e-12)
-	  groundedSource   = true
-	  DCsolver.doClear = 1
-	  Adc              = G'*Msig*G
-	  phi0,DCSolver    = solveDC!(Adc,G'*s,DCsolver)
-	  ew[:,:,1]        = -G*phi0
-	  DCsolver.doClear = 0
-	  if ~storeDCf
-	    clear!(DCsolver)
-	    DCsolver.doClear = 1
-	  end
-	else
-	  groundedSource = false
-	end
-
-        #Element-wise linear interp.
-        EMsolver.doClear = 1
-	A    = Curl'*Mmu*Curl + 3/(2*dt)*Msig
-	rhs  = 3/(2*dt)*( Msig*ew[:,:,1] + (wave[1]-wave[2])*s )
-	ehat,EMsolver = solveMaxTime!(A,rhs,Msig,Msh,2/(3*dt),EMsolver)
-	EMsolver.doClear = 0
-	rhs  = 3/(2*dt)*( Msig*ehat )
-	ehat2,EMsolver = solveMaxTime!(A,rhs,Msig,Msh,2/(3*dt),EMsolver)
-	ew[:,:,2] = 0.5*(ehat+ehat2)
-	param.ehat = ehat
-	
-	#Continue time-stepping using BDF2
-	for i=2:nt
-	  rhs = -3/(2*dt)*( (wave[i+1]-(4/3)*wave[i]+wave[i-1]/3)*s + 
-	        Msig*(-4/3*ew[:,:,i] + ew[:,:,i-1]/3 ) )
-	  ew[:,:,i+1],EMsolver = solveMaxTime!(A,rhs,Msig,Msh,dt,EMsolver)
-	end
-	if ~storeEMf
-	  clear!(EMsolver)
-	  EMsolver.doClear = 1
-	end
-	
-	# compute the data
-	#Note (for grounded sources) that DC data
-	#Are computed as the integral of electric field over a receiver
-	#dipole and not as a potential difference
-	if groundedSource
-	  D = zeros(size(P,2),numSrc,nt+1)
-	  D[:,:,1] = P'*ew[:,:,1]
-	  offset = 1
-	else
-	  D = zeros(size(P,2),numSrc,nt)
-	  offset = 0
-	end
-	for i=1:nt
-		D[:,:,i+offset] = P'*ew[:,:,i+1]
-	end
-	param.fields = ew
-	
-	return D, param
-end
-
-#--------------------------------------------------------------------
-
-function getData(sigma::Array{Float64,1},param::MaxwellTimeTRBDF2Param)
-  #function getData(sigma,param)
-  #Use BDF2 backward differentiation formula for second order time-stepping
-	dt       = param.dt
-	nt       = param.nt
-	wave     = param.wave
-	Msh      = param.M
-	mySolver = param.solver
-	
-
-	mu     = 4*pi*1e-7	
-	Curl   = getCurlMatrix(Msh)
-	Msig   = getEdgeMassMatrix(Msh,vec(sigma))
-	Mmu    = getFaceMassMatrix(Msh,1/mu*ones(size(sigma)))
-        Ne,Qe, = getEdgeConstraints(Msh)
-        G      = getNodalGradientMatrix(Msh)
-        Nn,Qn  = getNodalConstraints(Msh)
-        Nf,Qf  = getFaceConstraints(Msh)
-        
-        G     = Qe*G*Nn
-        Curl  = Qf*Curl*Ne
-        Mmu   = Nf'*Mmu*Nf
-        Msig  = Ne'*Msig*Ne
-        s     = Ne'*copy(param.Sources)
-        P     = Ne'*param.Obs
-        
-        # allocate space for fields
-	numSrc = size(s,2)
-        #numSrc  = size(b0,2)
-	ew = zeros(size(Ne,2),numSrc,nt+1);
-
-	#Compute e_0. Check divergence first to determine source type
-	mySolver.doClear = 1
-	if any( abs(G'*s) .> 1e-12)
-	  groundedSource = true
-	  Adc = G'*Msig*G
-	  phi0,mySolver = solveLinearSystem(Adc,G'*s,mySolver,1,0)
-	  ew[:,:,1] = -G*phi0
-	  clear!(mySolver)
-	else
-	  groundedSource = false
-	end
-
-
-        #Setup gamma related stuff
-        gma     = 2-sqrt(2)
-        gmaFctr = 2/(gma*dt)
-        f1      = 1/(gma*(2-gma))
-        f2      = ((1-gma)^2)/(gma*(2-gma))
-
-        #Factor the matrix once and for all
-        mySolver.doClear = 1
-        K = Curl'*Mmu*Curl
-        A = K + gmaFctr*Msig
-	
-	#Time-stepping
-	for i=1:nt
-	  
-	  #Trapezoidal rule to get e_(n+gma)
-	  if i > 1
-	    rhs = -K*ew[:,:,i] + gmaFctr*( Msig*ew[:,:,i] + (wave[i]-wave[i+1])*s )
-	  else
-	    rhs = gmaFctr*( Msig*ew[:,:,i] + (wave[i]-wave[i+1])*s )
-	  end
-	  eGma,mySolver = solveMaxTime(A,rhs,Msig,Msh,dt,mySolver)
-	  mySolver.doClear = 0
-	  
-	  #BDF-2 to get e_(n+1)
-	  wvGma = 0.0
-	  rhs = gmaFctr*( f1*Msig*eGma - f2*Msig*ew[:,:,i] + (wvGma-wave[i]-wave[i+1])*s )
-	  ew[:,:,i+1],mySolver = solveMaxTime(A,rhs,Msig,Msh,dt,mySolver)
-	end
-	mySolver.doClear = 1
-	
-	# compute the data
-	#Note (for grounded sources) that DC data
-	#Are computed as the integral of electric field over a receiver
-	#dipole and not as a potential difference
-	if groundedSource
-	  D = zeros(size(P,2),numSrc,nt+1)
-	  D[:,:,1] = P'*ew[:,:,1]
-	  offset = 1
-	else
-	  D = zeros(size(P,2),numSrc,nt)
-	  offset = 0
-	end
-	for i=1:nt
-		D[:,:,i+offset] = P'*ew[:,:,i+1]
-	end
-	param.fields = ew
-	
-	return D, param #,ehat
-end
-
-function getData(sigma::Array{Float64,1},param::MaxwellTimeSEParam)
-
-#function getTDdata(sigma::Array{Float64,1},M::AbstractMesh,P::SparseMatrixCSC,b0,dt::Vector,wave::Vector)
-# d,e = getTDdata(sigma::Vector,M::Mesh,P::SparseMatrixCSC,b0::Vector,dt::Vector,wave::Vector)
-# Solve the Backward Euler system
-# Curl*e + b_t = 0
-# Curl'*(Mmuinv*b) - Msig*e = s(t)
-#
-# By eliminating b and solving for e
-# b_t =  -Curl*e
-# (Curl'*Mmuinv*Curl + 1/dt*Msig)*en = - 1/dt*Msig*e_{n-1} + s(n+1)
-#
-	tempParam = getMaxwellTimeParam(param.M,param.Sources,param.Obs, param.dt, param.wave,
-	                                param.EMsolver,param.DCsolver,param.storeDCfactors)
-	param.Sens=[]
-	D,tempParam = getData(sigma,tempParam)
-	param.fields = tempParam.fields
-	return D, param
+    # Compute the electric fields at times [cumsum(dt)]
+    # param.timeIntegrationMethod is a symbol. See supportedIntegrationMethods
+    # in MaxwellTime.jl for valid options.
+    # integrationFunctions is a dictionary that maps timeIntegrationMethod
+    # symbols to their corresponding getTransientFields<IntegrationMethod> 
+    # functions.
+    getTransientFields  = integrationFunctions[param.timeIntegrationMethod]
+    param               = getTransientFields(K,Msig,s,param)
+    
+    
+    # Compute the data from the fields.
+    # Note (for grounded sources) that DC data
+    # Are computed as the integral of electric field over a receiver
+    # dipole and not as a potential difference
+    Pt = param.Obs'*Ne
+    if sourceType == :Galvanic
+        D = zeros(size(Pt,1),ns,length(dt)+1)
+        D[:,:,1] = Pt*e[:,:,1]
+        offset = 1
+    else
+        D = zeros(size(Pt,1),ns,length(dt))
+        offset = 0
+    end
+    for i=1:length(dt)
+        D[:,:,i+offset] = Pt*e[:,:,i+1]
+    end
+    
+    return D, param
 end
