@@ -53,6 +53,7 @@ function getData(model::MaxwellTimeModel,param::MaxwellTimeParam)
     storageLevel  = param.storageLevel
     EMsolver      = param.EMsolvers   
     dt            = param.dt
+    s             = param.sources
     
     # Check model input 
     in(length(sigma),[M.nc; 3*M.nc; 6*M.nc]) || error("MaxwellTime.getData: Invalid length of sigma")
@@ -74,9 +75,6 @@ function getData(model::MaxwellTimeModel,param::MaxwellTimeParam)
     
     # Form K = Curl'*Mmu*Curl
     K = getMaxwellCurlCurlMatrix(M,mu)
-    
-    # Restrict source to active (not hanging) edges
-    s = Ne'*param.Sources
     
     # Initialize electric field storage
     ne            = size(Ne,2) #Number of active edges

@@ -25,6 +25,7 @@ function getFieldsBE{T,N}(K::SparseMatrixCSC{T,N},
     dt            = param.dt
     wave          = param.wave
     M             = param.M
+    ew            = param.fields
     
     # Clear any factorizations still being stored
     for solver in EMsolvers
@@ -34,7 +35,6 @@ function getFieldsBE{T,N}(K::SparseMatrixCSC{T,N},
     # Do the time-stepping
     iStepSize = 0
     A         = []
-    ew        = param.fields
     for i=1:length(dt)
         dtinv = 1.0/dt[i]
         rhs = dtinv*(Msig*ew[:,:,i]+(wave[i]-wave[i+1])*s)

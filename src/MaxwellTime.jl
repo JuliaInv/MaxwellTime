@@ -6,8 +6,7 @@ using jInv.Utils
 using jInv.LinearSolvers
 using KrylovMethods
 		
-export MaxwellTimeParam, getMaxwellTimeParam,MaxwellTimeBDF2Param,
-       getMaxwellTimeBDF2Param,MaxwellTimeTRBDF2Param,getMaxwellTimeTRBDF2Param
+export MaxwellTimeParam, getMaxwellTimeParam
 import jInv.ForwardShare.ForwardProbType
 export ForwardProbType
 
@@ -66,7 +65,7 @@ MaxwellTimeParam{S,T,U}(M::AbstractMesh,Sources::AbstractArray{S},Obs::AbstractA
 """
 function param = getMaxwellTimeParam(M,Sources,Obs,dt,wave,sourceType;kwargs)
 
-Input:
+Input:  Mandatory arguments:
 
         M::AbstractMesh
         Sources - Array of size ne X ns where ne is number of mesh edges 
@@ -76,7 +75,54 @@ Input:
         Obs - Linear measurement matrix. Data at time tn = Obs'*efield(tn)
         dt  - vector holding size of each time-step. For direct solvers,
               the number of factorizations = length(unique(dt))
-        wave - vector containing
+        wave - vector of length 1+length(dt) giving the magnitude of the
+               current at each time in [0;cumsum(dt)]
+        sourceType::Symbol - Options are :Inductive and :Galvanic.
+                             Inductive sources assume zero electric field
+                             at t=0 (initial time). Solve DC problem to 
+                             compute initial electric fields. DC electric
+                             field data are computed for galvanic sources
+        
+        Optional keyword arguments:
+        
+        storageLevel::Symbol - Options are :Factors, :Matrices, :None.
+                               Default value :Factors. If a direct solver
+                               is being used and :Factors is chosen,
+                               factorizations computed during forward 
+                               modelling will be stored for future use in
+                               sensitivity computations. A new factorization
+                               is computed for each unique step-size. the
+                               :Matrices stores matrices but not
+                               factorizations. It is mostly for iterative 
+                               solvers but may also be used to gain small
+                               savings in computation time when using 
+                               on problems too large to store multiple
+                               factorizations simultaneously.
+        
+        sensitivityMethod::Symbol - Options are :Implicit, :Explicit. Default
+                               value is :Implicit. 
+                               
+        timeIntegrationMethod::Symbol - Options are :BE for backward Euler,
+                               :BDF2 for variable step-size second order
+                               backward differentiation formula, :BDF2Const
+                               for BDF2 with constant step-size, :TRBDF2
+                               for unstable trapezoidal BDF2 method. It's
+                               only in here for experimentation. Perhaps
+                               we'll add exponential integrators at some
+                               point too.
+        
+        EMSolverType::Symbol - Linear solver for EM time-stepping solves. 
+                               Currently supported options
+                               are :MUMPS, :Pardiso and :JuliaSolver (to use
+                               Julia's built in sparse Cholesky routine,
+                               which I believe is cholmod, from SuiteSparse).
+                               Default is :MUMPS
+                               
+        DCSolverType::Symbol - Solver for DC problem for galvanic sources.
+                               Same options as EMSolverType.
+                               
+        
+                               
 """
 function getMaxwellTimeParam{S<:Real,T<:Integer}(M::AbstractMesh,
                                                  Sources::AbstractArray{S},
@@ -129,7 +175,14 @@ function getMaxwellTimeParam{S<:Real,T<:Integer}(M::AbstractMesh,
         EMsolvers = [baseEMSolver] 
     end
     
-    return MaxwellTimeParam(M,Sources,Obs,dt,wave,sourceType,storageLevel,
+    # The following is a no-op for conformal meshes
+    # For non-conformal meshes, restrict source to active edges.
+    # This is done here to save having to do it every iteration
+    # in an inversion.
+    Ne,Qe, = getEdgeConstraints(M)
+    s      = Ne'*Sources
+    
+    return MaxwellTimeParam(M,s,Obs,dt,wave,sourceType,storageLevel,
                             sensitivityMethod,timeIntegrationMethod,
                             EMsolvers,DCsolver)
 end
@@ -142,16 +195,20 @@ immutable MaxwellTimeModel{S<:Real}
     invertSigma::Bool
     invertmu::Bool  
     
-    MaxwellTimeModel(sigma::Vector{S},mu::Vector{S}) = new(sigma,mu,true,true)
+    MaxwellTimeModel(sigma::Vector{S},mu::Vector{S}) = 
+      new(sigma,mu,true,false)
 end
-MaxwellTimeModel{S}(sigma::Vector{S},mu::Vector{S}) = MaxwellTimeModel{S}(sigma,mu)
+
+MaxwellTimeModel{S}(sigma::Vector{S},mu::Vector{S}) = 
+  MaxwellTimeModel{S}(sigma,mu)
 
 # Define time-stepping functions and map integration method symbols to
 # the appropriate functions defined in getFields.jl
 include("getFields.jl")
 integrationFunctions = Dict(zip(supportedIntegrationMethods,
-                                [getFieldsBE;getFieldsBDF2;getFieldsBDF2ConstDT;
-                                getFieldsTRBDF2]))
+                                [getFieldsBE;getFieldsBDF2;
+                                 getFieldsBDF2ConstDT;
+                                 getFieldsTRBDF2]))
 
 # Add MaxwellTime specific methods to following three jInv generic functions
 import jInv.ForwardShare.getData
@@ -159,69 +216,11 @@ import jInv.ForwardShare.getSensMatVec
 import jInv.ForwardShare.getSensTMatVec
                                 
 include("getData.jl")
-#include("getSensMatVec.jl")
-#include("getSensTMatVec.jl")
+include("getSensMatVec.jl")
+include("getSensTMatVec.jl")
 
 # Interface MaxwellTime to jInv.LinearSolvers to solve linear systems
 # of equations
 include("solverFunctions.jl")
 
-# 	#Maxwell Time domain with BDF-2 time stepping
-# 	type MaxwellTimeBDF2Param{S<:Real} <: ForwardProbType
-# 		M::AbstractMesh
-# 		Sources::AbstractArray{S}
-# 		Obs::AbstractArray{S}
-# 		dt::S
-# 		nt::Int64
-# 		wave::Vector{S}
-# 		EMsolver::AbstractSolver
-# 		storeEMfactors::Bool
-# 		DCsolver::AbstractSolver
-# 		storeDCfactors::Bool
-# 		fields::Array{S}
-# 		ehat::Array{S}
-# 	end
-# 	
-# 	
-# 	function getMaxwellTimeBDF2Param{S<:Real}(M::AbstractMesh,
-# 				Sources::AbstractArray{S},
-# 				Obs::AbstractArray{S},
-# 				dt::S,
-# 				nt::Int64,
-# 				wave::Vector{S},
-# 				EMsolver::AbstractSolver=getMUMPSsolver(),
-# 				storeEMfactors::Bool=true,
-# 				DCsolver::AbstractSolver=getMUMPSsolver(),
-# 				storeDCfactors::Bool=true)
-# 
-# 	return MaxwellTimeBDF2Param(M,Sources,Obs,dt,nt,wave,
-# 	         EMsolver,storeEMfactors,DCsolver,storeDCfactors,
-# 	         S[],S[])
-# 	end
-# 	
-# 	#Maxwell Time domain with TR-BDF2 time stepping
-# 	type MaxwellTimeTRBDF2Param{S<:Real} <: ForwardProbType
-# 		M::AbstractMesh
-# 		Sources::AbstractArray{S}
-# 		Obs::AbstractArray{S}
-# 		dt::S
-# 		nt::Int64
-# 		wave::Vector{S}
-# 		fields::Array{S}
-# 		fname::AbstractString
-# 		solver::AbstractSolver
-# 	end
-# 	
-# 	function getMaxwellTimeTRBDF2Param(M::AbstractMesh,
-# 										  Sources,
-# 										  Obs,
-# 										  dt,
-# 										  nt,
-# 										  wave,
-# 										  solver;
-# 										  fields=Array(Float64,0,0),
-# 							          	  fname="")
-# 
-# 		return MaxwellTimeTRBDF2Param(M,Sources,Obs,dt,nt,wave,fields,fname,solver)
-# 	end
-end
+end #End module MaxwellTime
