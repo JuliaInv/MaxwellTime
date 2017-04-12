@@ -41,18 +41,28 @@ function getFieldsBE{T,N}(K::SparseMatrixCSC{T,N},
         # Matrix only changes when the step-size changes
         if ( (i==1) || (dt[i] != dt[i-1]) )
             A = K + dtinv*Msig
-            iStepSize += 1
             if storageLevel == :Matrices
                 push!(Matrices,A)
+            end
+            if storageLevel == :Factors
+                iStepSize += 1
+            else
+                iStepSize  = 1
+                EMsolvers[1].doClear = 1
             end
         end
         # Solve the e-field update system. Msig and M left as inputs
         # in case iterative solver is used in the future. Currently, this code
         # only supports direct solvers
-        ew[:,:,i+1],EMsolvers = solveMaxTimeBE!(A,rhs,Msig,M,dt,i,iStepSize,
-                                               storageLevel,EMsolvers)
+        ew[:,:,i+1],EMsolvers[iStepSize] = 
+            solveMaxTimeBE!(A,rhs,Msig,M,dt,i,storageLevel,
+                            EMsolvers[iStepSize])
     end
-    
+    if storageLevel != :Factors
+        for solver in EMsolvers
+          solver.doClear = 1
+        end
+    end
     return param
 end
 
@@ -95,7 +105,7 @@ function getFieldsBDF2{T,N}(K::SparseMatrixCSC{T,N},
                         Msig*(-4/3*ew[:,:,i] + ew[:,:,i-1]/3) )
       ew[:,:,i+1],EMsolver = solveMaxTime!(A,rhs,Msig,M,dt,EMsolver)
     end
-    if storageLevel ~= :Factors
+    if storageLevel != :Factors
       clear!(EMsolver)
       EMsolver.doClear = 1
     end   

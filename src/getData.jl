@@ -53,7 +53,7 @@ function getData(model::MaxwellTimeModel,param::MaxwellTimeParam)
     storageLevel  = param.storageLevel
     EMsolver      = param.EMsolvers   
     dt            = param.dt
-    s             = param.sources
+    s             = param.Sources
     
     # Check model input 
     in(length(sigma),[M.nc; 3*M.nc; 6*M.nc]) || error("MaxwellTime.getData: Invalid length of sigma")

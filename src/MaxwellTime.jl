@@ -41,7 +41,7 @@ type MaxwellTimeParam{S<:Real,T<:AbstractSolver,U<:AbstractSolver} <: ForwardPro
                         # factorization. Needs to be stored for use in sensitivity
                         # computations
     
-    # Use inner constructor to allow creation of objects with
+    # Use custom constructor to allow creation of objects with
     # Matrices, fields, and explicit sensitivity matrix left uninitialized
     MaxwellTimeParam(M::AbstractMesh,Sources::AbstractArray{S},Obs::AbstractArray{S},
                      dt::Vector{S},wave::Vector{S},sourceType::Symbol,
@@ -52,6 +52,7 @@ type MaxwellTimeParam{S<:Real,T<:AbstractSolver,U<:AbstractSolver} <: ForwardPro
                                      timeIntegrationMethod,
                                      EMsolvers,DCsolver)
 end
+# Stupid parametric types needing these matching outer and inner constructors
 MaxwellTimeParam{S,T,U}(M::AbstractMesh,Sources::AbstractArray{S},Obs::AbstractArray{S},
 	                 dt::Vector{S},wave::Vector{S},sourceType::Symbol,
 	                 storageLevel::Symbol,sensitivityMethod::Symbol,
@@ -193,14 +194,20 @@ immutable MaxwellTimeModel{S<:Real}
     sigma::Vector{S}
     mu::Vector{S}
     invertSigma::Bool
-    invertmu::Bool  
+    invertMu::Bool  
     
     MaxwellTimeModel(sigma::Vector{S},mu::Vector{S}) = 
       new(sigma,mu,true,false)
+      
+    MaxwellTimeModel(sigma::Vector{S},mu::Vector{S},invertSigma::Bool,invertMu::Bool) = 
+            new(sigma,mu,invertSigma,invertMu)
 end
 
 MaxwellTimeModel{S}(sigma::Vector{S},mu::Vector{S}) = 
   MaxwellTimeModel{S}(sigma,mu)
+  
+MaxwellTimeModel{S}(sigma::Vector{S},mu::Vector{S},invertSigma::Bool,invertMu::Bool) = 
+  MaxwellTimeModel{S}(sigma,mu,invertSigma,invertMu)
 
 # Define time-stepping functions and map integration method symbols to
 # the appropriate functions defined in getFields.jl
@@ -210,10 +217,12 @@ integrationFunctions = Dict(zip(supportedIntegrationMethods,
                                  getFieldsBDF2ConstDT;
                                  getFieldsTRBDF2]))
 
-# Add MaxwellTime specific methods to following three jInv generic functions
+# Add MaxwellTime specific methods to following jInv generic functions
 import jInv.ForwardShare.getData
 import jInv.ForwardShare.getSensMatVec
 import jInv.ForwardShare.getSensTMatVec
+import jInv.ForwardShare.interpGlobalToLocal
+import jInv.ForwardShare.interpLocalToGlobal
                                 
 include("getData.jl")
 include("getSensMatVec.jl")

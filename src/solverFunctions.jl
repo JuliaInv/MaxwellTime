@@ -2,31 +2,20 @@ export solveMaxTimeBE!, solveMaxTimeBDF2ConstDT!, solveDC!
 
 typealias directSolver Union{MUMPSsolver,jInvPardisoSolver,JuliaSolver}
 
-#Handles direct solvers for BE
-function solveMaxTimeBE!{T<:directSolver}(A,rhs,Msig,
-                      M::AbstractMesh,dt::Vector{Float64},it::Int64,iFacIn::Int64,
-                      storageLevel::Symbol,linSolParamList::Array{T},flag=0)
-#= 
-Solve the maxwell system using MUMPS or Pardiso
+"""
+function solveMaxTimeBE!(A,rhs,Msig,M::AbstractMesh,dt::Vector{Real},it::Integer,
+                      storageLevel::Symbol,linSolParam::directSolver,flag=0)
+                      
+Solve the maxwell system using selected direct solver
+"""
+function solveMaxTimeBE!{T<:Real}(A,rhs,Msig,M::AbstractMesh,dt::Vector{T},it::Integer,
+                      storageLevel::Symbol,linSolParam::directSolver,flag=0)
 
-en, = solveMaxTimeBE!{T<:directSolver}(A,rhs,Msig,
-                    M::AbstractMesh,dt::Vector{Float64},it::Int64,iFacIn::Int64,
-                    linSolParamList::Array{T},flag=0)
+    X                   = zeros(eltype(rhs),size(rhs))
+    X, linSolParam      = solveLinearSystem!(A,rhs,X,linSolParam,flag)
+    linSolParam.doClear = 0
 
-=#
-    iFac = iFacIn
-    if storageLevel != :Factors
-        iFac = 1
-        if ( (it==1) || (dt[it] != dt[it-1]) )
-            linSolParamList[iFac].doClear = 1
-        end
-    end
-    X                             = zeros(size(rhs))
-    X, linSolParamList[iFac]      = solveLinearSystem!(A,rhs,X,linSolParamList[iFac],
-                                                       flag)
-    linSolParamList[iFac].doClear = 0
-
-return X, linSolParamList
+return X, linSolParam
 end
 
 #Handles direct solvers for BDF-2
@@ -46,13 +35,13 @@ function solveMaxTimeBDF2ConstDT!(A,rhs,Msig,
 return X, linSolParam
 end
 
+"""
+en, = solveDC!(A,rhs,linSolParam::directSolver,flag=0)
+
+Solve the divSigmaGrad system using selected direct solver
+"""
 function solveDC!(A,rhs,linSolParam::directSolver,flag=0)
-#= 
- 	Solve the maxwell system using MUMPS
 
- 	en, = solveDC!(A,rhs,linSolParam::directSolver,flag=0)
-
-=#
   X              = zeros(size(rhs))
   X, linSolParam = solveLinearSystem!(A,rhs,X,linSolParam,flag)
   

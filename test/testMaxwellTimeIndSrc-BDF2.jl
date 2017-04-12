@@ -64,7 +64,8 @@ wave = zeros(length(dt)+1); wave[1] = 1.0
 sigma   = zeros(M.nc)+1e-2
 sigma[Xc[:,3] .> 1024] = 1e-8
 
-pFor = getMaxwellTimeBDF2Param(M,Sources,P,dt0,nt,wave)
+sourceType = :Inductive
+pFor = getMaxwellTimeParam(M,Sources,P,dt0,nt,wave,sourceType,timeIntegrationMethod=:BDF2Const)
 
 tic()
 D,pFor = getData(sigma,pFor);

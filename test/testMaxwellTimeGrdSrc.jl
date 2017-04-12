@@ -133,7 +133,7 @@ for i=1:ns
 end
 
 #Get data at initial model
-pFor   = getMaxwellTimeParam(Msh,Sources,P',dt,wave)
+pFor   = getMaxwellTimeParam(Msh,Sources,P',dt,wave,sourceType)
 println("Getting data")
 D,pFor = getData(sigma,pFor)
 

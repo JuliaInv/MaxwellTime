@@ -54,7 +54,8 @@ wave    = zeros(length(dt)+1); wave[1] = 1.0
 sigma   = zeros(M.nc)+1e-2
 sigma[Xc[:,3] .> 1024] = 1e-8
 
-pFor = getMaxwellTimeParam(M,Sources,P,dt,wave)
+sourceType = :Inductive
+pFor = getMaxwellTimeParam(M,Sources,P,dt,wave,sourceType)
 
 tic()
 D,pFor = getData(sigma,pFor);
@@ -79,7 +80,8 @@ pass,Error,Order = checkDerivativeMax(f,df,sigma;nSuccess=5,v=z)
 println("==========  Derivative Test -- explicit sensitivities ======================")
 println(" ")
 
-pForSE = getMaxwellTimeSEParam(M,Sources,P,dt,wave)
+pForSE = getMaxwellTimeParam(M,Sources,P,dt,wave,sourceType,
+                             sensitivityMethod=:Explicit)
 
 function f(sigdum)
   d, = getData(sigdum,pForSE)
