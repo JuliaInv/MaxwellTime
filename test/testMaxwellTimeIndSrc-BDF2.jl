@@ -57,6 +57,7 @@ end
 
 dt0  = 1e-4
 nt   = 6
+dt   = dt0*ones(nt)
 t    = dt0*collect(0:nt) #[0; logspace(-6,-2,25)] #[0,1.3,2.7,4.5,6.4]*1e-8; #        
 dt   = diff(t)
 wave = zeros(length(dt)+1); wave[1] = 1.0
@@ -65,7 +66,7 @@ sigma   = zeros(M.nc)+1e-2
 sigma[Xc[:,3] .> 1024] = 1e-8
 
 sourceType = :Inductive
-pFor = getMaxwellTimeParam(M,Sources,P,dt0,nt,wave,sourceType,timeIntegrationMethod=:BDF2Const)
+pFor = getMaxwellTimeParam(M,Sources,P,dt,wave,sourceType,timeIntegrationMethod=:BDF2Const)
 
 tic()
 D,pFor = getData(sigma,pFor);
