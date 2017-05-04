@@ -121,14 +121,19 @@ function getSensMatVecBE{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
     Msig   = Ne'*Msig*Ne
     P      = Ne'*param.Obs
     if invertMu || (param.storageLevel == :None)
-        Nf,Qf, = getFaceConstraints(M)
-        Curl   = getCurlMatrix(M)
-        Curl   = Qf*Curl*Ne
-        Mmu    = getFaceMassMatrix(M,1./mu)
-        Mmu    = Nf'*Mmu*Nf
+        Nf,Qf,    = getFaceConstraints(M)
+        Curl      = getCurlMatrix(M)
+        Curl      = Qf*Curl*Ne
+        Mmu       = getFaceMassMatrix(M,1./mu)
+        Mmu       = Nf'*Mmu*Nf
+        DmuinvDmu = spdiagm(-1./(mu.^2))
     else
         Curl = spzeros(T,0,0)
         Mmu  = spzeros(T,0,0)
+    end
+    
+    if invertMu & (length(mu)>3*M.nc)
+        error("MaxwellTime:getSensMatVec: Inverting fully anisotropic mu not supported")
     end
     
     #Initialize intermediate and output arrays
@@ -168,6 +173,10 @@ function getSensMatVecBE{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
         end
     end
     
+    if invertMu
+        
+    end
+    
     iStepSize = 0
     A         = []
     rhsSigma  = invertSigma ? zeros(T,ne,ns) : 0
@@ -191,7 +200,8 @@ function getSensMatVecBE{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
      	        rhsSigma[:,j] = Gzi*DsigDmz + 1/dt[i]*Msig*lam[:,j,1]
             end
             if invertMu
-                Gzi        = Curl'*Nf'*getdFaceMassMatrix(M,mu,Nf*Curl*ew[:,j,i+1])
+                Gzi        = Curl'*Nf'*getdFaceMassMatrix(M,1./mu,Nf*Curl*ew[:,j,i+1])*
+                             DmuinvDmu
                 rhsMu[:,j] = Gzi*DmuDmz
             end
             rhs = rhsSigma + rhsMu

@@ -49,6 +49,9 @@ wave[1] = 1.0
 a     = rand(Msh.nc)
 b     = 10*rand(Msh.nc) - 4
 sigma = a.^b
+mu0   = 4*pi*1e-7  # magnetic permeability
+chi   = 100*rand(Msh.nc)
+mu    = mu0*(1+chi)
 
 #Get data at initial model
 sourceType = :Galvanic
@@ -59,11 +62,10 @@ ew     = pFor.fields
 
 #Form sensitivity matrix and related quantities
 println("Forming sensitivity matrix")
-mu     = 4*pi*1e-7  # magnetic permeability
 Curl   = getCurlMatrix(Msh)
 G      = getNodalGradientMatrix(Msh)
 Msig   = getEdgeMassMatrix(Msh,vec(sigma))
-Mmu    = getFaceMassMatrix(Msh,fill(1/mu,Msh.nc))
+Mmu    = getFaceMassMatrix(Msh,fill(1/mu0,Msh.nc))
 Ne,Qe, = getEdgeConstraints(Msh)
 Nn,Qn, = getNodalConstraints(Msh)
 Nf,Qf, = getFaceConstraints(Msh)
@@ -137,6 +139,11 @@ pFor   = getMaxwellTimeParam(Msh,Sources,P',dt,wave,sourceType)
 println("Getting data")
 D,pFor = getData(sigma,pFor)
 
+
+println(" ")
+println("==========  Test sigma inversion ======================")
+println(" ")
+
 println(" ")
 println("==========  Derivative Test ======================")
 println(" ")
@@ -170,3 +177,83 @@ I2 = dot(JTz,z)
 println(I1,"      ",I2)
 println("Relative error:",abs(I1-I2)/abs(I1))
 @test abs(I1-I2)/abs(I1) < 1e-10
+
+
+
+println(" ")
+println("==========  Test mu inversion ======================")
+println(" ")
+
+println(" ")
+println("==========  Derivative Test ======================")
+println(" ")
+
+m  = MaxwellTimeModel(sigma,chi,false,true)
+m0 = MaxwellTimeModel(sigma,zeros(length(chi)),false,false)
+pass,Error,Order = checkDerivativeMax(f,df,m,m0;nSuccess=5)
+@test pass
+
+
+println(" ")
+println("==========  Adjoint Test ======================")
+println(" ")
+
+v     = randn(prod(size(D)))
+Dsig  = Vector()
+dmudm = spdiagm((pi*4e-7)*exp(mu))
+push!(Dsig,UniformScaling(1.0))
+push!(Dsig,dmudm)
+
+tic()
+Jz = getSensMatVec(z,sigma,pFor)
+toc()
+I1 = dot(v,Jz)
+
+tic()
+JTzLoc = getSensTMatVec(v,sigma,pFor)
+JTz    = interpLocalToGlobal(Dsig,JTzLoc,speye(length(mu)))
+toc()
+
+I2 = dot(JTz,z)
+
+println(I1,"      ",I2)
+println("Relative error:",abs(I1-I2)/abs(I1))
+@test abs(I1-I2)/abs(I1) < 1e-10
+
+# println(" ")
+# println("==========  Test simultaneous sigma and mu inversion ======================")
+# println(" ")
+# 
+# println(" ")
+# println("==========  Derivative Test ======================")
+# println(" ")
+# 
+# function f(sigdum)
+#   d, = getData(sigdum,pFor)
+#   return d
+# end
+#   
+# df(zdum,sigdum) = getSensMatVec(zdum,sigdum,pFor)
+# pass,Error,Order = checkDerivativeMax(f,df,sigma;nSuccess=5)
+# @test pass
+# 
+# 
+# println(" ")
+# println("==========  Adjoint Test ======================")
+# println(" ")
+# 
+# v  = randn(prod(size(D)))
+# tic()
+# Jz = getSensMatVec(z,sigma,pFor)
+# toc()
+# I1 = dot(v,Jz)
+# 
+# tic()
+# JTz = getSensTMatVec(v,sigma,pFor)
+# toc()
+# 
+# I2 = dot(JTz,z)
+# 
+# println(I1,"      ",I2)
+# println("Relative error:",abs(I1-I2)/abs(I1))
+# @test abs(I1-I2)/abs(I1) < 1e-10

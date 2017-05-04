@@ -111,7 +111,7 @@ function getData(model::MaxwellTimeModel,param::MaxwellTimeParam)
     # Are computed as the integral of electric field over a receiver
     # dipole and not as a potential difference
     Pt = param.Obs'*Ne
-    if sourceType == :Galvanic
+    if (sourceType == :Galvanic) & model.invertSigma
         D = zeros(size(Pt,1),ns,length(dt)+1)
         D[:,:,1] = Pt*e[:,:,1]
         offset = 1
