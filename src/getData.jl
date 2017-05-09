@@ -3,14 +3,14 @@ export getData
 # For backward compatibility and convenience if first argument to getData
 # is a vector of real numbers and not an object of type MaxwellTimeModel
 # then assume first argument is conductivity and set permeability mu=mu0
-function getData{S<:Real}(sigma::Vector{S},param::MaxwellTimeParam)
+function getData{S<:Real}(sigma::Vector{S},param::MaxwellTimeParam,doClear::Bool=false)
     m = MaxwellTimeModel(sigma,fill(4*pi*1e-7,param.Mesh.nc))
     return getData(m,param)
 end
 
 
 """
-function getData(model::MaxwellTimeModel,param::MaxwellTimeParam)
+function getData(model::MaxwellTimeModel,param::MaxwellTimeParam,doClear::Bool=false)
 
 Given electrical conductivity and magnetic permeability models, compute the
 electric field at requested time steps, store the fields in param, and
@@ -40,7 +40,7 @@ Input:
                     matrix factorizations and the electric fields for further
                     use in sensitivity computations.
 """
-function getData(model::MaxwellTimeModel,param::MaxwellTimeParam)
+function getData(model::MaxwellTimeModel,param::MaxwellTimeParam,doClear::Bool=false)
 #function getData(sigma,param)   
         
     # Unpack model into conductivity and magnetic permeability
