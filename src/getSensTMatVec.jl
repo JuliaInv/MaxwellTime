@@ -116,7 +116,8 @@ function getSensTMatVecBE{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
     dt          = [dt[:];dt[end]]
     uniqueSteps = unique(dt)
     A           = spzeros(T,0,0)
-    dtLast      = 0.0 # Size of last time step, used to check if 
+    iSolver     = 0
+    dtLast      = -1.0 # Size of last time step, used to check if 
                       # factorization of Forward mod. matrix is needed.
     for i=length(dt)-1:-1:1
         if dt[i] != dtLast
