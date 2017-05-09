@@ -8,6 +8,7 @@ type MaxwellTimeParam{S<:Real,T<:AbstractSolver,U<:AbstractSolver} <: ForwardPro
     M::AbstractMesh
     Sources::AbstractArray{S}
     Obs::AbstractArray{S}
+    ObsTimes::AbstractArray{S}
     dt::Vector{S}
     wave::Vector{S}
     sourceType::Symbol
@@ -28,10 +29,10 @@ type MaxwellTimeParam{S<:Real,T<:AbstractSolver,U<:AbstractSolver} <: ForwardPro
     # Use custom constructor to allow creation of objects with
     # Matrices, fields, and explicit sensitivity matrix left uninitialized
     MaxwellTimeParam(M::AbstractMesh,Sources::AbstractArray{S},Obs::AbstractArray{S},
-                     dt::Vector{S},wave::Vector{S},sourceType::Symbol,
+                     ObsTimes::AbstractArray{S},dt::Vector{S},wave::Vector{S},sourceType::Symbol,
                      storageLevel::Symbol,sensitivityMethod::Symbol,
                      timeIntegrationMethod::Symbol,EMsolvers::Vector{T},
-                     DCsolver::U) = new(M,Sources,Obs,dt,wave,sourceType,
+                     DCsolver::U) = new(M,Sources,Obs,ObsTimes,dt,wave,sourceType,
                                      storageLevel,sensitivityMethod,
                                      timeIntegrationMethod,
                                      EMsolvers,DCsolver)
@@ -39,11 +40,11 @@ end
 
 # Unfortunately parametric types need these matching outer and inner constructors
 MaxwellTimeParam{S,T,U}(M::AbstractMesh,Sources::AbstractArray{S},Obs::AbstractArray{S},
-	                 dt::Vector{S},wave::Vector{S},sourceType::Symbol,
+	                 ObsTimes::AbstractArray{S},dt::Vector{S},wave::Vector{S},sourceType::Symbol,
 	                 storageLevel::Symbol,sensitivityMethod::Symbol,
 	                 timeIntegrationMethod::Symbol,EMsolvers::Vector{T},
 	                 DCsolver::U) = MaxwellTimeParam{S,T,U}(
-	                                                 M,Sources,Obs,dt,wave,
+	                                                 M,Sources,Obs,ObsTimes,dt,wave,
 	                                                 sourceType,storageLevel,
 	                                                 sensitivityMethod,
                                                          timeIntegrationMethod,
@@ -67,7 +68,11 @@ Input:  Mandatory arguments:
                   and ns number of sources. Each column contains integral
                   of source wire path approximated onto the mesh. Normally
                   computed using getEdgeIntegralofPolygonalChain.
-        Obs - Linear measurement matrix. Data at time tn = Obs'*efield(tn)
+        Obs -     Linear measurement matrix. Computes data at times 
+                  at which electric field is measured as Dtmp = Obs'*efield(tn)
+        ObsTimes - Vector of observation times. Data is first computed at
+                   times with efields then linearly interpolated to observation
+                   times.
         dt  - vector holding size of each time-step. For direct solvers,
               the number of factorizations = length(unique(dt))
         wave - vector of length 1+length(dt) giving the magnitude of the
@@ -122,6 +127,7 @@ Input:  Mandatory arguments:
 function getMaxwellTimeParam{S<:Real,T<:Integer}(M::AbstractMesh,
                                                  Sources::AbstractArray{S},
                                                  Obs::SparseMatrixCSC{S,T},
+                                                 ObsTimes::Vector{S},
                                                  dt::Vector{S},
                                                  wave::Vector{S},
                                                  sourceType::Symbol;
@@ -179,7 +185,31 @@ function getMaxwellTimeParam{S<:Real,T<:Integer}(M::AbstractMesh,
     Ne,Qe, = getEdgeConstraints(M)
     s      = Ne'*Sources
     
-    return MaxwellTimeParam(M,s,Obs,dt,wave,sourceType,storageLevel,
+    ObsTimeMat = getObsTimeMatrix(ObsTimes,dt,size(Obs,2),size(s,2),sourceType)
+    
+    return MaxwellTimeParam(M,s,Obs,ObsTimeMat,dt,wave,sourceType,storageLevel,
                             sensitivityMethod,timeIntegrationMethod,
                             EMsolvers,DCsolver)
+end
+
+function getObsTimeMatrix{S<:Real}(ObsTimes::Vector{S},dt::Vector{S},
+                                   nr::Integer,ns::Integer,sourceType::Symbol)
+    t = sourceType == :Galvanic ? [0;cumsum(dt)] : cumsum(dt)
+    #obsIdx = [searchsortedfirst(t,ti) for ti in ObsTimes]
+    nt = length(ObsTimes)
+    interpWeights = zeros(S,nt)
+    mat = spzeros(S,nt*nr*ns,length(t)*nr*ns)
+    for i in 1:nt
+        obsIdx = searchsortedfirst(t,ObsTimes[i])
+        if obsIdx == 1
+            interpWeights[i] = 1
+            mat[1:nr*ns,1:nr*ns] = speye(nr*ns)
+        else
+            interpWeights[i] = (t[obsIdx]-ObsTimes[i])/(t[obsIdx]-t[obsIdx-1])
+            w = interpWeights[i]
+            mat[(i-1)*nr*ns+1:i*nr*ns,(obsIdx-2)*nr*ns+1:obsIdx*nr*ns] =
+                spdiagm((w*ones(nr*ns),(1-w)*ones(nr*ns)),(0,nr*ns),nr*ns,2*nr*ns)
+        end
+    end
+    return mat
 end

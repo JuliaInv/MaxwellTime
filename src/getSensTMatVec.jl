@@ -77,9 +77,11 @@ function getSensTMatVecBE{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
         Curl   = Qf*Curl*Ne
         Mmu    = getFaceMassMatrix(M,1./mu)
         Mmu    = Nf'*Mmu*Nf
+    end
+    if param.storageLevel == :None
+        K = Curl'*Mmu*Curl
     else
-        Curl = spzeros(T,0,0)
-        Mmu  = spzeros(T,0,0)
+        K = spzeros(T,0,0)
     end
 
     #Initialize intermediate and output arrays
@@ -88,48 +90,42 @@ function getSensTMatVecBE{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
     nt  = length(dt)
     nr  = size(P,2)
     lam = zeros(T,ne,ns,2)
-	
+    
+    # Multiply by transpose of time interpolation matrix
+    # To map from data space to data at all times space
+    ptz = param.ObsTimes'*z
+    
     # Check source type
     groundedSource = param.sourceType == :Galvanic ? true : false
-	
     if groundedSource
-        z  = reshape(z,nr,ns,nt+1)
-        pz = zeros(T,ne,ns,nt)
-        for i=1:ns
-            for j=1:nt
-                pz[:,i,j] = P*z[:,i,j+1]
-            end
+        ptz  = reshape(ptz,nr,ns,nt+1)
+        pz   = zeros(T,ne,ns,nt)
+        for j=1:nt
+            pz[:,:,j] = P*ptz[:,:,j+1]
         end
     else
-        z  = reshape(z,nr,ns,nt)
-        pz = zeros(T,ne,ns,nt)
-        for i=1:ns
-            for j=1:nt
-                pz[:,i,j] = P*z[:,i,j]
-            end
+        ptz  = reshape(ptz,nr,ns,nt)
+        pz   = zeros(T,ne,ns,nt)
+        for j=1:nt
+            pz[:,:,j] = P*ptz[:,:,j]
         end
     end
     
-    JTvSigma = zeros(T,length(sigma))
-    JTvMu    = zeros(T,length(mu))
-    dt       = [dt[:];dt[end]]
-    dtLast   = 0.0 # Size of last time step, used to check if 
-                   # factorization of Forward mod. matrix is needed.
-    iStepSize = length(EMsolvers)+1
+    JTvSigma    = zeros(T,length(sigma))
+    JTvMu       = zeros(T,length(mu))
+    dt          = [dt[:];dt[end]]
+    uniqueSteps = unique(dt)
+    A           = spzeros(T,0,0)
+    dtLast      = 0.0 # Size of last time step, used to check if 
+                      # factorization of Forward mod. matrix is needed.
     for i=length(dt)-1:-1:1
         if dt[i] != dtLast
-            A = getBEMatrix(Msig,Mmu,Curl,dt[i],iStepSize,param)
-            if storageLevel == :Factors
-                iStepSize -= 1
-            else
-                iStepSize = 1
-                EMsolvers[1].doClear = 1
-            end
+            A,iSolver = getBEMatrix!(dt[i],A,K,Msig,param,uniqueSteps)
         end
         
         rhs = pz[:,:,i] + 1/dt[i+1]*Msig*lam[:,:,2]
-        lam[:,:,1],EMsolvers[iStepSize] = solveMaxTimeBE!(A,rhs,Msig,M,dt,i,storageLevel,
-                                                         EMsolvers[iStepSize])
+        lam[:,:,1],EMsolvers[iSolver] = solveMaxTimeBE!(A,rhs,Msig,M,dt,i,storageLevel,
+                                                         EMsolvers[iSolver])
         for j = 1:ns
             if invertSigma
                 Gzi        = (1/dt[i])*getdEdgeMassMatrix(M,Ne*(ew[:,j,i+1]-ew[:,j,i]))
@@ -160,7 +156,7 @@ function getSensTMatVecBE{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
         Gin      = getNodalGradientMatrix(M)
         G        = Qe*Gin*Nn
         A        = getDCmatrix(Msig,G,param) # Forms matrix only if needed
-        pz0      = -G'*P*z[:,:,1]
+        pz0      = -G'*P*ptz[:,:,1]
         rhs      = pz0 - 1/dt[1]*G'*Msig*lam[:,:,2]
         lam0,DCsolver = solveDC!(A,rhs,DCsolver)
         for j = 1:ns

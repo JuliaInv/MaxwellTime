@@ -29,6 +29,9 @@ include("MaxwellTimeModel.jl")
 # Define time-stepping (integration) functions and map 
 # integration method symbols to the appropriate
 # functions defined in getFields.jl
+# getFields.jl also contains matrix construction helper
+# functions used in both forward modelling and sensitivity
+# computations
 include("getFields.jl")
 integrationFunctions = Dict(zip(supportedIntegrationMethods,
                                 [getFieldsBE;getFieldsBDF2;

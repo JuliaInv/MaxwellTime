@@ -33,30 +33,22 @@ function getFieldsBE{T,N}(K::SparseMatrixCSC{T,N},
     end
     
     # Do the time-stepping
-    iStepSize = 0
-    A         = []
+    iSolver = 0
+    uniqueSteps = Vector{eltype(ew)}()
+    A           = spzeros(T,0,0)
     for i=1:length(dt)
         dtinv = 1.0/dt[i]
         rhs = dtinv*(Msig*ew[:,:,i]+(wave[i]-wave[i+1])*s)
         # Matrix only changes when the step-size changes
         if ( (i==1) || (dt[i] != dt[i-1]) )
-            A = K + dtinv*Msig
-            if storageLevel == :Matrices
-                push!(Matrices,A)
-            end
-            if storageLevel == :Factors
-                iStepSize += 1
-            else
-                iStepSize  = 1
-                EMsolvers[1].doClear = 1
-            end
+            A,iSolver = getBEMatrix!(dt[i],A,K,Msig,param,uniqueSteps)
         end
         # Solve the e-field update system. Msig and M left as inputs
         # in case iterative solver is used in the future. Currently, this code
         # only supports direct solvers
-        ew[:,:,i+1],EMsolvers[iStepSize] = 
+        ew[:,:,i+1],EMsolvers[iSolver] = 
             solveMaxTimeBE!(A,rhs,Msig,M,dt,i,storageLevel,
-                            EMsolvers[iStepSize])
+                            EMsolvers[iSolver])
     end
     if storageLevel != :Factors
         for solver in EMsolvers
@@ -270,6 +262,25 @@ function getFieldsDC{T,N}(Msig::SparseMatrixCSC{T,N},
     return param
 end
 
+# Used only by sensitivity routines
+# Can unify the way DC is handled in forward and 
+# sensitivity routines after cleaning up how constraints
+# on derivative matrices are handled---hopefully by moving more
+# of that work into JOcTree
+function getDCmatrix{T<:Real,N}(Msig::SparseMatrixCSC{T,N},G::SparseMatrixCSC{T,N},
+                       param::MaxwellTimeParam)
+    
+    storageLevel = param.storageLevel
+    if storageLevel == :Matrices
+        A = param.Matrices[1]
+    elseif storageLevel == :None
+        A   = G'*Msig*G
+    else
+        A = spzeros(0) # Empty sparse matrix placeholder argument
+    end
+    return A
+end
+
 function getMaxwellCurlCurlMatrix(M::AbstractMesh,mu)	
     Curl   = getCurlMatrix(M)
     Mmu    = getFaceMassMatrix(M,1./mu)
@@ -279,4 +290,36 @@ function getMaxwellCurlCurlMatrix(M::AbstractMesh,mu)
     Mmu    = Nf'*Mmu*Nf
     K      = Curl'*Mmu*Curl
     return K
+end
+
+function getBEMatrix!{T,N}(dt::T,A::SparseMatrixCSC{T,N},
+                           K::SparseMatrixCSC{T,N},Msig::SparseMatrixCSC{T,N},
+                           param::MaxwellTimeParam,uniqueSteps::Vector{T})
+                           
+    storageLevel = param.storageLevel
+    if ~in(dt,uniqueSteps)
+        push!(uniqueSteps,dt)
+        A = K + (1/dt)*Msig
+        if storageLevel == :Matrices
+            push!(param.Matrices,A)
+        end
+        if storageLevel == :Factors
+            iSolver = length(uniqueSteps)
+        else
+            iSolver  = 1
+            param.EMsolvers[1].doClear = 1
+        end
+    else
+        iv = indexin([dt],uniqueSteps)
+        if storageLevel == :Factors
+            iSolver = iv[1]
+        elseif storageLevel == :Matrices
+            iSolver = 1
+            A       = param.Matrices[iv[1]]
+        else
+            iSolver = 1
+            A       = K + (1/dt)*Msig
+        end
+    end
+    return A,iSolver
 end

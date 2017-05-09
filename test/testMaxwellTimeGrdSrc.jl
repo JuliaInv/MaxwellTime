@@ -55,7 +55,8 @@ mu    = mu0*(1+chi)
 
 #Get data at initial model
 sourceType = :Galvanic
-pFor       = getMaxwellTimeParam(Msh,Sources,P',dt,wave,sourceType)
+obsTimes   = [0;cumsum(dt)]
+pFor       = getMaxwellTimeParam(Msh,Sources,P',obsTimes,dt,wave,sourceType)
 println("Getting data")
 d,pFor = getData(sigma,pFor)
 ew     = pFor.fields
@@ -135,9 +136,10 @@ for i=1:ns
 end
 
 #Get data at initial model
-pFor   = getMaxwellTimeParam(Msh,Sources,P',dt,wave,sourceType)
+obsTimes = [0.0;1.5e-4;2.5e-4;5e-4]
+pFor     = getMaxwellTimeParam(Msh,Sources,P',obsTimes,dt,wave,sourceType)
 println("Getting data")
-D,pFor = getData(sigma,pFor)
+D,pFor   = getData(sigma,pFor)
 
 
 println(" ")
@@ -184,13 +186,24 @@ println(" ")
 println("==========  Test mu inversion ======================")
 println(" ")
 
+m  = MaxwellTimeModel(sigma,chi,false,true)
+m0 = MaxwellTimeModel(sigma,zeros(length(chi)),false,false)
+obsTimes   = cumsum(dt[2:end])
+pFor       = getMaxwellTimeParam(Msh,Sources,P',obsTimes,dt,wave,sourceType)
+d,pFor = getData(m,pFor)
+
+function f2(sigdum)
+  d, = getData(sigdum,pFor)
+  return d
+end
+  
+df2(zdum,sigdum) = getSensMatVec(zdum,sigdum,pFor)
+
 println(" ")
 println("==========  Derivative Test ======================")
 println(" ")
 
-m  = MaxwellTimeModel(sigma,chi,false,true)
-m0 = MaxwellTimeModel(sigma,zeros(length(chi)),false,false)
-pass,Error,Order = checkDerivativeMax(f,df,m,m0;nSuccess=5)
+pass,Error,Order = checkDerivativeMax(f2,df2,m,m0;nSuccess=5)
 @test pass
 
 

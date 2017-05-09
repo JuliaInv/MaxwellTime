@@ -106,22 +106,29 @@ function getData(model::MaxwellTimeModel,param::MaxwellTimeParam)
     param               = getTransientFields(K,Msig,s,param)
     
     
-    # Compute the data from the fields.
+    # Compute the data from the fields, at the times the fields
+    # are computed at, then interpolate the data to the observation times.
     # Note (for grounded sources) that DC data
     # Are computed as the integral of electric field over a receiver
     # dipole and not as a potential difference
     Pt = param.Obs'*Ne
+    nr = size(Pt,1)
     if (sourceType == :Galvanic) & model.invertSigma
-        D = zeros(size(Pt,1),ns,length(dt)+1)
-        D[:,:,1] = Pt*e[:,:,1]
+        nt          = length(dt)+1
+        Dtmp        = zeros(nr,ns,nt)
+        Dtmp[:,:,1] = Pt*e[:,:,1]
         offset = 1
     else
-        D = zeros(size(Pt,1),ns,length(dt))
+        nt     = length(dt)
+        Dtmp   = zeros(nr,ns,nt)
         offset = 0
     end
     for i=1:length(dt)
-        D[:,:,i+offset] = Pt*e[:,:,i+1]
+        Dtmp[:,:,i+offset] = Pt*e[:,:,i+1]
     end
+    # Interpolate to the observation times
+    nTmpData = nr*ns*nt
+    D        = param.ObsTimes*reshape(Dtmp,nTmpData)
     
     return D, param
 end

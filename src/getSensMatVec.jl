@@ -127,9 +127,11 @@ function getSensMatVecBE{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
         Mmu       = getFaceMassMatrix(M,1./mu)
         Mmu       = Nf'*Mmu*Nf
         DmuinvDmu = spdiagm(-1./(mu.^2))
+    end
+    if param.storageLevel == :None
+        K = Curl'*Mmu*Curl
     else
-        Curl = spzeros(T,0,0)
-        Mmu  = spzeros(T,0,0)
+        K = spzeros(T,0,0)
     end
     
     if invertMu & (length(mu)>3*M.nc)
@@ -177,21 +179,16 @@ function getSensMatVecBE{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
         
     end
     
-    iStepSize = 0
-    A         = []
-    rhsSigma  = invertSigma ? zeros(T,ne,ns) : 0
-    rhsMu     = invertMu ? zeros(T,ne,ns) : 0
+    iSolver     = 0
+    uniqueSteps = unique(dt)
+    A           = spzeros(T,0,0)
+    rhsSigma    = invertSigma ? zeros(T,ne,ns) : 0
+    rhsMu       = invertMu ? zeros(T,ne,ns) : 0
     for i=1:nt
         # Form A when needed. It is not stored or formed if
         # param.storageLevel == :Factors
         if ( (i==1) || (dt[i] != dt[i-1]) )        
-            A = getBEMatrix(Msig,Mmu,Curl,dt[i],iStepSize,param)
-            if storageLevel == :Factors
-                iStepSize += 1
-            else
-                iStepSize = 1
-                EMsolvers[1].doClear = 1
-            end
+            A,iSolver = getBEMatrix!(dt[i],A,K,Msig,param,uniqueSteps)
         end
         for j = 1:ns
             if invertSigma
@@ -206,9 +203,9 @@ function getSensMatVecBE{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
             end
             rhs = rhsSigma + rhsMu
         end
-     	lam[:,:,2],EMsolvers[iStepSize] = 
+     	lam[:,:,2],EMsolvers[iSolver] = 
      	    solveMaxTimeBE!(A,rhs,Msig,M,dt,i,storageLevel,
-     	                    EMsolvers[iStepSize])
+     	                    EMsolvers[iSolver])
         
         # compute Jv
         Jv[:,:,i]  = -P'*(lam[:,:,2])
@@ -221,7 +218,7 @@ function getSensMatVecBE{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
         end
     end  
     Jv = (groundedSource && invertSigma) ? [vec(Jvdc);vec(Jv)] : vec(Jv)
-    return Jv
+    return param.ObsTimes*Jv
 end
 
 #-------------------------------------------------------
@@ -362,35 +359,21 @@ end
 
 #-------------------------------------------------------
 
-function getDCmatrix{T<:Real,N}(Msig::SparseMatrixCSC{T,N},G::SparseMatrixCSC{T,N},
-                       param::MaxwellTimeParam)
-    
-    storageLevel = param.storageLevel
-    if storageLevel == :Matrices
-        A = param.Matrices[1]
-    elseif storageLevel == :None
-        A   = G'*Msig*G
-    else
-        A = spzeros(0) # Empty sparse matrix placeholder argument
-    end
-    return A
-end
-
-function getBEMatrix{T<:Real,N}(Msig::SparseMatrixCSC{T,N},Mmu::SparseMatrixCSC{T,N},
-                       Curl::SparseMatrixCSC{T,N},
-                       dt::T,iStepSize::N,param::MaxwellTimeParam)
-
-    storageLevel = param.storageLevel
-    if storageLevel == :Matrices
-        matNum = param.sourceType == :Galvanic ? iStepSize+1 : iStepSize
-        A = param.Matrices[matNum]
-    elseif storageLevel == :None
-        A = Curl'*Mmu*Curl + (1/dt)*Msig
-    else
-        A = spzeros(T,0,0) # Empty sparse matrix placeholder argument
-    end
-    return A
-end
+# function getBEMatrix{T<:Real,N}(Msig::SparseMatrixCSC{T,N},Mmu::SparseMatrixCSC{T,N},
+#                        Curl::SparseMatrixCSC{T,N},
+#                        dt::T,iStepSize::N,param::MaxwellTimeParam)
+# 
+#     storageLevel = param.storageLevel
+#     if storageLevel == :Matrices
+#         matNum = param.sourceType == :Galvanic ? iStepSize+1 : iStepSize
+#         A = param.Matrices[matNum]
+#     elseif storageLevel == :None
+#         A = Curl'*Mmu*Curl + (1/dt)*Msig
+#     else
+#         A = spzeros(T,0,0) # Empty sparse matrix placeholder argument
+#     end
+#     return A
+# end
 
 function getBDF2ConstDTmatrix{T<:Real,N}(Msig::SparseMatrixCSC{T,N},
                                          Mmu::SparseMatrixCSC{T,N},
