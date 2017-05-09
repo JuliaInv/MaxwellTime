@@ -4,7 +4,7 @@ export getData
 # is a vector of real numbers and not an object of type MaxwellTimeModel
 # then assume first argument is conductivity and set permeability mu=mu0
 function getData{S<:Real}(sigma::Vector{S},param::MaxwellTimeParam)
-    m = MaxwellTimeModel(sigma,fill(4*pi*1e-7,param.M.nc))
+    m = MaxwellTimeModel(sigma,fill(4*pi*1e-7,param.Mesh.nc))
     return getData(m,param)
 end
 
@@ -48,7 +48,7 @@ function getData(model::MaxwellTimeModel,param::MaxwellTimeParam)
     mu    = model.mu
     
     #Unpack param
-    M             = param.M
+    M             = param.Mesh
     sourceType    = param.sourceType
     storageLevel  = param.storageLevel
     EMsolver      = param.EMsolvers   

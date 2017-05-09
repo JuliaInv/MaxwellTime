@@ -4,7 +4,7 @@ export getSensTMatVec,interpLocalToGlobal
 function getSensTMatVec{T<:Real}(z::Vector{T},sigma::Vector{T},
                                  param::MaxwellTimeParam)
     m   = MaxwellTimeModel(sigma,fill(convert(eltype(sigma),4*pi*1e-7),
-                           param.M.nc))
+                           param.Mesh.nc))
     JTz = getSensTMatVec(z,m,param)
     return JTz.sigma
 end
@@ -59,7 +59,7 @@ function getSensTMatVecBE{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
     invertMu    = model.invertMu	
 
     #Unpack param
-    M             = param.M
+    M             = param.Mesh
     storageLevel  = param.storageLevel
     EMsolvers     = param.EMsolvers   
     dt            = param.dt
@@ -194,7 +194,7 @@ function getSensTMatVecBDF2ConstDT{T<:Real}(z::Vector{T},model::MaxwellTimeModel
     end
 
     #Unpack param
-    M             = param.M
+    M             = param.Mesh
     storageLevel  = param.storageLevel
     EMsolver      = param.EMsolvers[1]
     dt            = param.dt[1]

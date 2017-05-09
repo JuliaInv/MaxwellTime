@@ -5,7 +5,7 @@ export MaxwellTimeParam, getMaxwellTimeParam
 # last three fields left uninitialized. Use getMaxwellTimeParam function 
 # for instantiation. It validates input and sets things to default values.
 type MaxwellTimeParam{S<:Real,T<:AbstractSolver,U<:AbstractSolver} <: ForwardProbType
-    M::AbstractMesh
+    Mesh::AbstractMesh
     Sources::AbstractArray{S}
     Obs::AbstractArray{S}
     ObsTimes::AbstractArray{S}
@@ -28,23 +28,23 @@ type MaxwellTimeParam{S<:Real,T<:AbstractSolver,U<:AbstractSolver} <: ForwardPro
     
     # Use custom constructor to allow creation of objects with
     # Matrices, fields, and explicit sensitivity matrix left uninitialized
-    MaxwellTimeParam(M::AbstractMesh,Sources::AbstractArray{S},Obs::AbstractArray{S},
+    MaxwellTimeParam(Mesh::AbstractMesh,Sources::AbstractArray{S},Obs::AbstractArray{S},
                      ObsTimes::AbstractArray{S},dt::Vector{S},wave::Vector{S},sourceType::Symbol,
                      storageLevel::Symbol,sensitivityMethod::Symbol,
                      timeIntegrationMethod::Symbol,EMsolvers::Vector{T},
-                     DCsolver::U) = new(M,Sources,Obs,ObsTimes,dt,wave,sourceType,
+                     DCsolver::U) = new(Mesh,Sources,Obs,ObsTimes,dt,wave,sourceType,
                                      storageLevel,sensitivityMethod,
                                      timeIntegrationMethod,
                                      EMsolvers,DCsolver)
 end
 
 # Unfortunately parametric types need these matching outer and inner constructors
-MaxwellTimeParam{S,T,U}(M::AbstractMesh,Sources::AbstractArray{S},Obs::AbstractArray{S},
+MaxwellTimeParam{S,T,U}(Mesh::AbstractMesh,Sources::AbstractArray{S},Obs::AbstractArray{S},
 	                 ObsTimes::AbstractArray{S},dt::Vector{S},wave::Vector{S},sourceType::Symbol,
 	                 storageLevel::Symbol,sensitivityMethod::Symbol,
 	                 timeIntegrationMethod::Symbol,EMsolvers::Vector{T},
 	                 DCsolver::U) = MaxwellTimeParam{S,T,U}(
-	                                                 M,Sources,Obs,ObsTimes,dt,wave,
+	                                                 Mesh,Sources,Obs,ObsTimes,dt,wave,
 	                                                 sourceType,storageLevel,
 	                                                 sensitivityMethod,
                                                          timeIntegrationMethod,
@@ -59,11 +59,11 @@ supportedStorageLevels      = [:Factors; :Matrices; :None]
 supportedSensitivityMethods = [:Implicit; :Explicit]
 
 """
-function param = getMaxwellTimeParam(M,Sources,Obs,dt,wave,sourceType;kwargs)
+function param = getMaxwellTimeParam(Mesh,Sources,Obs,dt,wave,sourceType;kwargs)
 
 Input:  Mandatory arguments:
 
-        M::AbstractMesh
+        Mesh::AbstractMesh
         Sources - Array of size ne X ns where ne is number of mesh edges 
                   and ns number of sources. Each column contains integral
                   of source wire path approximated onto the mesh. Normally
@@ -124,7 +124,7 @@ Input:  Mandatory arguments:
         
                                
 """
-function getMaxwellTimeParam{S<:Real,T<:Integer}(M::AbstractMesh,
+function getMaxwellTimeParam{S<:Real,T<:Integer}(Mesh::AbstractMesh,
                                                  Sources::AbstractArray{S},
                                                  Obs::SparseMatrixCSC{S,T},
                                                  ObsTimes::Vector{S},
@@ -182,12 +182,12 @@ function getMaxwellTimeParam{S<:Real,T<:Integer}(M::AbstractMesh,
     # For non-conformal meshes, restrict source to active edges.
     # This is done here to save having to do it every iteration
     # in an inversion.
-    Ne,Qe, = getEdgeConstraints(M)
+    Ne,Qe, = getEdgeConstraints(Mesh)
     s      = Ne'*Sources
     
     ObsTimeMat = getObsTimeMatrix(ObsTimes,dt,size(Obs,2),size(s,2),sourceType)
     
-    return MaxwellTimeParam(M,s,Obs,ObsTimeMat,dt,wave,sourceType,storageLevel,
+    return MaxwellTimeParam(Mesh,s,Obs,ObsTimeMat,dt,wave,sourceType,storageLevel,
                             sensitivityMethod,timeIntegrationMethod,
                             EMsolvers,DCsolver)
 end

@@ -6,7 +6,7 @@ function getSensMatVec{T<:Real}(z::Vector{T},sigma::Vector{T},
                        param::MaxwellTimeParam)
     zm = MaxwellTimeModel(z,[one(eltype(z))])
     m  = MaxwellTimeModel(sigma,fill(convert(eltype(sigma),4*pi*1e-7),
-                          param.M.nc))
+                          param.Mesh.nc))
     return getSensMatVec(zm,m,param)
 end                       
 
@@ -108,7 +108,7 @@ function getSensMatVecBE{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
     invertMu    = model.invertMu
     
     #Unpack param
-    M             = param.M
+    M             = param.Mesh
     storageLevel  = param.storageLevel
     EMsolvers     = param.EMsolvers   
     dt            = param.dt
@@ -260,7 +260,7 @@ function getSensMatVecBDF2ConstDT{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
     invertMu    = model.invertMu
     
     #Unpack param
-    M            = param.M
+    M            = param.Mesh
     storageLevel = param.storageLevel
     EMsolver     = param.EMsolvers[1]
     dt           = param.dt[1]

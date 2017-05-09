@@ -24,7 +24,7 @@ function getFieldsBE{T,N}(K::SparseMatrixCSC{T,N},
     EMsolvers     = param.EMsolvers   
     dt            = param.dt
     wave          = param.wave
-    M             = param.M
+    M             = param.Mesh
     ew            = param.fields
     
     # Clear any factorizations still being stored
@@ -73,7 +73,7 @@ function getFieldsBDF2{T,N}(K::SparseMatrixCSC{T,N},
     dt           = param.dt[1]
     nt           = length(param.dt)
     wave         = param.wave
-    M            = param.M
+    M            = param.Mesh
     ew           = param.fields
     
     # BDF2 with step size dt has same matrix as backward Euler with
@@ -121,7 +121,7 @@ function getFieldsBDF2ConstDT{T,N}(K::SparseMatrixCSC{T,N},
     dt           = param.dt[1]
     nt           = length(param.dt)
     wave         = param.wave
-    M            = param.M
+    M            = param.Mesh
     ew           = param.fields
     
     # BDF2 with step size dt has same matrix as backward Euler with
@@ -161,7 +161,7 @@ end
 function getFieldsTRBDF2{S<:Real}(sigma::Vector{S},mu::Vector{S},param::MaxwellTimeParam)
     
     # Unpack param initialize electric field, and setup source
-    M             = param.M
+    M             = param.Mesh
     sourceType    = param.sourceType
     e             = param.fields
     EMsolver      = param.EMsolvers    
@@ -235,7 +235,7 @@ function getFieldsDC{T,N}(Msig::SparseMatrixCSC{T,N},
                           s::AbstractArray{T},
                           param::MaxwellTimeParam)
                           
-    M            = param.M
+    M            = param.Mesh
     solver       = param.DCsolver
     storageLevel = param.storageLevel
     ew           = param.fields
