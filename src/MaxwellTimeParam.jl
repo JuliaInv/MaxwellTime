@@ -124,9 +124,9 @@ Input:  Mandatory arguments:
         
                                
 """
-function getMaxwellTimeParam{S<:Real,T<:Integer}(Mesh::AbstractMesh,
+function getMaxwellTimeParam{S<:Real}(Mesh::AbstractMesh,
                                                  Sources::AbstractArray{S},
-                                                 Obs::SparseMatrixCSC{S,T},
+                                                 Obs::AbstractArray{S},
                                                  ObsTimes::Vector{S},
                                                  dt::Vector{S},
                                                  wave::Vector{S},

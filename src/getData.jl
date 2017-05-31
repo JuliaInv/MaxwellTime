@@ -87,7 +87,7 @@ function getData(model::MaxwellTimeModel,param::MaxwellTimeParam,doClear::Bool=f
     # being used and factorizatons are being stored, then matrices don't 
     # need to be stored
     if storageLevel == :Matrices
-        param.Matrices = Vector{SparseMatrixCSC{eltype(G.nzval),eltype(G.colptr)}}()
+        param.Matrices = Vector{SparseMatrixCSC{eltype(K.nzval),eltype(K.colptr)}}()
         Matrices       = param.Matrices
     end
     
@@ -113,7 +113,7 @@ function getData(model::MaxwellTimeModel,param::MaxwellTimeParam,doClear::Bool=f
     # dipole and not as a potential difference
     Pt = param.Obs'*Ne
     nr = size(Pt,1)
-    if (sourceType == :Galvanic) & model.invertSigma
+    if (sourceType == :Galvanic)
         nt          = length(dt)+1
         Dtmp        = zeros(nr,ns,nt)
         Dtmp[:,:,1] = Pt*e[:,:,1]

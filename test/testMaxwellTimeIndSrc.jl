@@ -5,6 +5,8 @@ using jInv.Utils
 using MUMPS
 using jInv.LinearSolvers
 
+@testset "Ind src BE time-stepping" begin
+
 L  = [4096, 4096, 2048.0]
 x0 = [0.0,  0.0,  0.0]
 n  = [8,  8,  8]
@@ -47,15 +49,18 @@ for i=1:ns
         Sources[:,i] = P[:,i]
 end
 
-t       = [1:6;]*1e-4 #[0; logspace(-6,-2,25)] #[0,1.3,2.7,4.5,6.4]*1e-8; #        
-dt      = diff(t)
-wave    = zeros(length(dt)+1); wave[1] = 1.0
+# t       = [1:6;]*1e-4 #[0; logspace(-6,-2,25)] #[0,1.3,2.7,4.5,6.4]*1e-8; #        
+# dt      = diff(t)
+dt       = (1e-4)*(1.25.^(0:5)).*ones(6)
+t        = cumsum(dt)
+obsTimes = t[1:5] + dt[1:5].*rand(5)
+wave     = zeros(length(dt)+1); wave[1] = 1.0
 
 sigma   = zeros(M.nc)+1e-2
 sigma[Xc[:,3] .> 1024] = 1e-8
 
 sourceType = :Inductive
-pFor = getMaxwellTimeParam(M,Sources,P,dt,wave,sourceType)
+pFor = getMaxwellTimeParam(M,Sources,P,obsTimes,dt,wave,sourceType)
 
 tic()
 D,pFor = getData(sigma,pFor);
@@ -80,7 +85,7 @@ pass,Error,Order = checkDerivativeMax(f,df,sigma;nSuccess=5,v=z)
 println("==========  Derivative Test -- explicit sensitivities ======================")
 println(" ")
 
-pForSE = getMaxwellTimeParam(M,Sources,P,dt,wave,sourceType,
+pForSE = getMaxwellTimeParam(M,Sources,P,obsTimes,dt,wave,sourceType,
                              sensitivityMethod=:Explicit)
 
 function f(sigdum)
@@ -111,3 +116,5 @@ I2 = dot(JTz,z)
 println(I1,"      ",I2)
 println("Relative error:",abs(I1-I2)/abs(I1))
 @test abs(I1-I2)/abs(I1) < 1e-10
+
+end

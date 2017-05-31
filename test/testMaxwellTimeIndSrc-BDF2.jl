@@ -5,6 +5,7 @@ using jInv.Utils
 using MUMPS
 using jInv.LinearSolvers
 
+@testset "Ind src BDF2 time-stepping" begin
 
 L  = [4096, 4096, 2048.0]
 x0 = [0.0,  0.0,  0.0]
@@ -55,18 +56,19 @@ for i=1:ns
         Sources[:,i] = P[:,i]
 end
 
-dt0  = 1e-4
-nt   = 6
-dt   = dt0*ones(nt)
-t    = dt0*collect(0:nt) #[0; logspace(-6,-2,25)] #[0,1.3,2.7,4.5,6.4]*1e-8; #        
-dt   = diff(t)
+dt0      = 1e-4
+nt       = 6
+dt       = dt0*ones(nt)
+t        = dt0*collect(0:nt) #[0; logspace(-6,-2,25)] #[0,1.3,2.7,4.5,6.4]*1e-8; #        
+dt       = round(diff(t),8)
+obsTimes = cumsum(dt)
 wave = zeros(length(dt)+1); wave[1] = 1.0
 
 sigma   = zeros(M.nc)+1e-2
 sigma[Xc[:,3] .> 1024] = 1e-8
 
 sourceType = :Inductive
-pFor = getMaxwellTimeParam(M,Sources,P,dt,wave,sourceType,timeIntegrationMethod=:BDF2Const)
+pFor = getMaxwellTimeParam(M,Sources,P,obsTimes,dt,wave,sourceType,timeIntegrationMethod=:BDF2Const)
 
 tic()
 D,pFor = getData(sigma,pFor);
@@ -106,3 +108,37 @@ I2 = dot(JTz,z)
 println(I1,"      ",I2)
 println("Relative error:",abs(I1-I2)/abs(I1))
 @test abs(I1-I2)/abs(I1) < 1e-10
+
+println(" ")
+println("==========  Derivative Test - ObsTimes != step times ======================")
+println(" ")
+
+obsTimes = obsTimes[1:5] + dt[1:5].*rand(5)
+pFor = getMaxwellTimeParam(M,Sources,P,obsTimes,dt,wave,sourceType,timeIntegrationMethod=:BDF2Const)
+
+function f2(sigdum)
+  d, = getData(sigdum,pFor)
+  return d
+end
+  
+df2(zdum,sigdum) = getSensMatVec(zdum,sigdum,pFor)
+pass,Error,Order = checkDerivativeMax(f2,df2,sigma;nSuccess=4,v=z)
+@test pass
+
+println(" ")
+println("==========  Adjoint Test ======================")
+println(" ")
+
+v  = randn(size(P,2)*size(Sources,2)*length(obsTimes))
+tic()
+Jz = getSensMatVec(z,sigma,pFor)
+toc()
+I1 = dot(v,Jz)
+
+tic()
+JTz = getSensTMatVec(v,sigma,pFor)
+toc()
+
+I2 = dot(JTz,z)
+
+end

@@ -2,6 +2,8 @@
 #source. Single source and multiple source configurations tested. Constant
 #time-step size used.
 
+@testset "Grd src BDF2 time-stepping" begin
+
 using MaxwellTime
 using JOcTree
 using Base.Test
@@ -56,7 +58,8 @@ sigma = a.^b
 #Get data at initial model
 sourceType            = :Galvanic
 timeIntegrationMethod = :BDF2Const
-pFor                  = getMaxwellTimeParam(Msh,Sources,P',dtvec,wave,sourceType,
+obsTimes              = t
+pFor                  = getMaxwellTimeParam(Msh,Sources,P',obsTimes,dtvec,wave,sourceType,
                                             timeIntegrationMethod=timeIntegrationMethod)
 println("Getting data")
 d,pFor = getData(sigma,pFor)
@@ -157,7 +160,7 @@ for i=1:ns
 end
 
 #Get data at initial model
-pFor   = pFor   = getMaxwellTimeParam(Msh,Sources,P',dtvec,wave,sourceType,
+pFor   = pFor   = getMaxwellTimeParam(Msh,Sources,P',obsTimes,dtvec,wave,sourceType,
                                  timeIntegrationMethod=timeIntegrationMethod)
 println("Getting data")
 D,pFor = getData(sigma,pFor)
@@ -198,3 +201,5 @@ I2 = dot(JTz,z)
 println(I1,"      ",I2)
 println("Relative error:",abs(I1-I2)/abs(I1))
 @test abs(I1-I2)/abs(I1) < 1e-10
+
+end

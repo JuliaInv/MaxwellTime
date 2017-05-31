@@ -8,6 +8,7 @@ using jInv.LinearSolvers
 using jInv.Utils
 using MUMPS
 
+@testset "Grd src BE time-stepping" begin
 println("Testing single source")
 
 L  = [4096, 4096, 2048.0]
@@ -50,7 +51,7 @@ a     = rand(Msh.nc)
 b     = 10*rand(Msh.nc) - 4
 sigma = a.^b
 mu0   = 4*pi*1e-7  # magnetic permeability
-chi   = 100*rand(Msh.nc)
+chi   = zeros(Msh.nc) #100*rand(Msh.nc)
 mu    = mu0*(1+chi)
 
 #Get data at initial model
@@ -156,7 +157,7 @@ function f(sigdum)
 end
   
 df(zdum,sigdum) = getSensMatVec(zdum,sigdum,pFor)
-pass,Error,Order = checkDerivativeMax(f,df,sigma;nSuccess=5)
+pass,Error,Order = checkDerivativeMax(f,df,sigma;nSuccess=4)
 @test pass
 
 
@@ -203,7 +204,7 @@ println(" ")
 println("==========  Derivative Test ======================")
 println(" ")
 
-pass,Error,Order = checkDerivativeMax(f2,df2,m,m0;nSuccess=5)
+pass,Error,Order = checkDerivativeMax(f2,df2,m,m0;nSuccess=4)
 @test pass
 
 
@@ -211,19 +212,21 @@ println(" ")
 println("==========  Adjoint Test ======================")
 println(" ")
 
-v     = randn(prod(size(D)))
-Dsig  = Vector()
-dmudm = spdiagm((pi*4e-7)*exp(mu))
-push!(Dsig,UniformScaling(1.0))
-push!(Dsig,dmudm)
+v     = randn(prod(size(d)));
+Dsig  = Vector();
+dmudm = spdiagm(fill(pi*4e-7,length(mu)));
+push!(Dsig,UniformScaling(1.0));
+push!(Dsig,dmudm);
 
+zmod = MaxwellTimeModel(sigma,dmudm*z,false,true)
+m2   = MaxwellTimeModel(sigma,mu0*(1+chi),false,true)
 tic()
-Jz = getSensMatVec(z,sigma,pFor)
+Jz = getSensMatVec(zmod,m2,pFor)
 toc()
 I1 = dot(v,Jz)
 
 tic()
-JTzLoc = getSensTMatVec(v,sigma,pFor)
+JTzLoc = getSensTMatVec(v,m2,pFor)
 JTz    = interpLocalToGlobal(Dsig,JTzLoc,speye(length(mu)))
 toc()
 
@@ -233,40 +236,58 @@ println(I1,"      ",I2)
 println("Relative error:",abs(I1-I2)/abs(I1))
 @test abs(I1-I2)/abs(I1) < 1e-10
 
-# println(" ")
-# println("==========  Test simultaneous sigma and mu inversion ======================")
-# println(" ")
-# 
-# println(" ")
-# println("==========  Derivative Test ======================")
-# println(" ")
-# 
-# function f(sigdum)
-#   d, = getData(sigdum,pFor)
-#   return d
-# end
-#   
-# df(zdum,sigdum) = getSensMatVec(zdum,sigdum,pFor)
-# pass,Error,Order = checkDerivativeMax(f,df,sigma;nSuccess=5)
-# @test pass
-# 
-# 
-# println(" ")
-# println("==========  Adjoint Test ======================")
-# println(" ")
-# 
-# v  = randn(prod(size(D)))
-# tic()
-# Jz = getSensMatVec(z,sigma,pFor)
-# toc()
-# I1 = dot(v,Jz)
-# 
-# tic()
-# JTz = getSensTMatVec(v,sigma,pFor)
-# toc()
-# 
-# I2 = dot(JTz,z)
-# 
-# println(I1,"      ",I2)
-# println("Relative error:",abs(I1-I2)/abs(I1))
-# @test abs(I1-I2)/abs(I1) < 1e-10
+println(" ")
+println("==========  Test simultaneous sigma and mu inversion ======================")
+println(" ")
+
+m    = MaxwellTimeModel(log(sigma),chi,true,true)
+m0   = MaxwellTimeModel(zeros(length(sigma)),zeros(length(chi)),false,false)
+pFor = getMaxwellTimeParam(Msh,Sources,P',obsTimes,dt,wave,sourceType)
+
+function f3(sigdum)
+  d, = getData(sigdum,pFor)
+  return d
+end
+  
+df3(zdum,sigdum) = getSensMatVec(zdum,sigdum,pFor)
+
+println(" ")
+println("==========  Derivative Test ======================")
+println(" ")
+
+
+pass,Error,Order = checkDerivativeMax(f3,df3,m,m0;nSuccess=4)
+@test pass
+
+
+println(" ")
+println("==========  Adjoint Test ======================")
+println(" ")
+
+Dsig   = Vector()
+dsigdm = [spdiagm(sigma) spzeros(Msh.nc,Msh.nc)]
+push!(Dsig,dsigdm)
+dmudm  = [spzeros(Msh.nc,Msh.nc) spdiagm(fill(pi*4e-7,length(mu)))]
+push!(Dsig,dmudm)
+
+z2 = rand(2*Msh.nc)
+
+zmod = MaxwellTimeModel(dsigdm*z2,dmudm*z2,true,true)
+m2   = MaxwellTimeModel(sigma,mu0*(1+chi),true,true)
+tic()
+Jz = getSensMatVec(zmod,m2,pFor)
+toc()
+I1 = dot(v,Jz)
+
+tic()
+JTzLoc = getSensTMatVec(v,m2,pFor)
+JTz    = interpLocalToGlobal(Dsig,JTzLoc,speye(length(mu)))
+toc()
+
+I2 = dot(JTz,z2)
+
+println(I1,"      ",I2)
+println("Relative error:",abs(I1-I2)/abs(I1))
+@test abs(I1-I2)/abs(I1) < 1e-10
+
+end

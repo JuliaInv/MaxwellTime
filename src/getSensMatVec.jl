@@ -173,6 +173,8 @@ function getSensMatVecBE{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
             clear!(DCsolver)
             DCsolver.doClear = 1
         end
+    elseif groundedSource && ~invertSigma
+       Jvdc   = zeros(T,size(P,2),ns)
     end
     
     if invertMu
@@ -194,14 +196,15 @@ function getSensMatVecBE{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
             if invertSigma
      	        Gzi           = (1/dt[i])*Ne'*getdEdgeMassMatrix(M,sigma,Ne*(ew[:,j,i+1]-
                                                             ew[:,j,i]))
-     	        rhsSigma[:,j] = Gzi*DsigDmz + 1/dt[i]*Msig*lam[:,j,1]
+     	        rhsSigma[:,j] = Gzi*DsigDmz
             end
             if invertMu
                 Gzi        = Curl'*Nf'*getdFaceMassMatrix(M,1./mu,Nf*Curl*ew[:,j,i+1])*
                              DmuinvDmu
                 rhsMu[:,j] = Gzi*DmuDmz
             end
-            rhs = rhsSigma + rhsMu
+            #println("$i   $(size())   $()")
+            rhs = 1/dt[i]*Msig*lam[:,:,1] + rhsSigma + rhsMu
         end
      	lam[:,:,2],EMsolvers[iSolver] = 
      	    solveMaxTimeBE!(A,rhs,Msig,M,dt,i,storageLevel,
@@ -217,7 +220,8 @@ function getSensMatVecBE{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
           solver.doClear = 1
         end
     end  
-    Jv = (groundedSource && invertSigma) ? [vec(Jvdc);vec(Jv)] : vec(Jv)
+    #Jv = (groundedSource && invertSigma) ? [vec(Jvdc);vec(Jv)] : vec(Jv)
+    Jv = groundedSource ? [vec(Jvdc);vec(Jv)] : vec(Jv)
     return param.ObsTimes*Jv
 end
 
@@ -354,7 +358,7 @@ function getSensMatVecBDF2ConstDT{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
         EMsolver.doClear = 1
     end
     Jv = groundedSource ? [vec(Jvdc);vec(Jv)] : vec(Jv)
-    return Jv
+    return param.ObsTimes*Jv
 end
 
 #-------------------------------------------------------

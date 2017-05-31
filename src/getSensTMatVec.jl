@@ -72,11 +72,12 @@ function getSensTMatVecBE{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
     Msig   = Ne'*Msig*Ne
     P      = Ne'*param.Obs
     if invertMu || (param.storageLevel == :None)
-        Nf,Qf, = getFaceConstraints(M)
-        Curl   = getCurlMatrix(M)
-        Curl   = Qf*Curl*Ne
-        Mmu    = getFaceMassMatrix(M,1./mu)
-        Mmu    = Nf'*Mmu*Nf
+        Nf,Qf,    = getFaceConstraints(M)
+        Curl      = getCurlMatrix(M)
+        Curl      = Qf*Curl*Ne
+        Mmu       = getFaceMassMatrix(M,1./mu)
+        Mmu       = Nf'*Mmu*Nf
+        DmuinvDmu = spdiagm(-1./(mu.^2))
     end
     if param.storageLevel == :None
         K = Curl'*Mmu*Curl
@@ -133,8 +134,8 @@ function getSensTMatVecBE{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
                 JTvSigma   = JTvSigma - Gzi'*(Ne*lam[:,j,1])  
             end
             if invertMu
-                Gzi        = (1/dt[i])*getdFaceMassMatrix(M,mu,Nf*Curl*ew[:,j,i+1])
-                JTvMu      = JTvMu - Gzi'*(Curl*Nf*lam[:,j,1])  
+                Gzi        = getdFaceMassMatrix(M,mu,Nf*Curl*ew[:,j,i+1])*DmuinvDmu
+                JTvMu      = JTvMu - Gzi'*(Nf*Curl*lam[:,j,1])  
             end
         end
         lam[:,:,2] = lam[:,:,1]
@@ -226,23 +227,27 @@ function getSensTMatVecBDF2ConstDT{T<:Real}(z::Vector{T},model::MaxwellTimeModel
     nr  = size(P,2)
     lam = zeros(T,ne,ns,3)
 	
+    # Multiply by transpose of time interpolation matrix
+    # To map from data space to data at all times space
+    ptz = param.ObsTimes'*z
+	
     # Check source type
     groundedSource = param.sourceType == :Galvanic ? true : false
 	
     if groundedSource
-      z  = reshape(z,nr,ns,nt+1)
-      pz = zeros(T,ne,ns,nt)
+      ptz  = reshape(ptz,nr,ns,nt+1)
+      pz   = zeros(T,ne,ns,nt)
       for i=1:ns
         for j=1:nt
-          pz[:,i,j] = P*z[:,i,j+1]
+          pz[:,i,j] = P*ptz[:,i,j+1]
         end
       end
     else
-      z  = reshape(z,nr,ns,nt)
-      pz = zeros(T,ne,ns,nt)
+      ptz  = reshape(ptz,nr,ns,nt)
+      pz   = zeros(T,ne,ns,nt)
       for i=1:ns
         for j=1:nt
-          pz[:,i,j] = P*z[:,i,j]
+          pz[:,i,j] = P*ptz[:,i,j]
         end
       end
     end
@@ -300,7 +305,7 @@ function getSensTMatVecBDF2ConstDT{T<:Real}(z::Vector{T},model::MaxwellTimeModel
         G        = Qe*Gin*Nn
         A        = getDCmatrix(Msig,G,param) # Forms matrix only if needed
         for j = 1:ns
-            rhs           = -G'*P*z[:,j,1] +
+            rhs           = -G'*P*ptz[:,j,1] +
                              1/(2*dt)*G'*Msig*lam[:,j,3] -
                              3/(4*dt)*G'*Msig*lam[:,j,2] - 
                              3/(2*dt)*G'*Msig*lmTmp[:,j]
