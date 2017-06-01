@@ -3,6 +3,7 @@ using Base.Test
 
 include("maxTime-derivative-test.jl")
 
+@testset "MaxwellTime tests" begin
 println(" ")
 println("==========  Test BE sensitivities Ind Src ======================")
 println(" ")
@@ -19,3 +20,4 @@ println(" ")
 println("==========  Test BDF2 sensitivities Grd Src ======================")
 println(" ")
 include("testMaxwellTimeGrdSrc-BDF2.jl")
+end

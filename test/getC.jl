@@ -1,19 +1,17 @@
-function C(u,sigma::Array{Float64,1},param::MaxwellTimeBDF2Param)
-	dt       = param.dt
-	nt       = param.nt
+function C(u,sigma::Array{Float64,1},param::MaxwellTimeParam)
+	dt       = param.dt[1]
+	nt       = length(param.dt)
 	wave     = param.wave
-	Msh      = param.M
-	mySolver = param.solver
-	
+	Msh      = param.Mesh
 
-	mu    = 4*pi*1e-7	
-	Curl  = getCurlMatrix(Msh)
-	Msig  = getEdgeMassMatrix(Msh,vec(sigma))
-	Mmu   = getFaceMassMatrix(Msh,1/mu*ones(size(sigma)))
-        Ne,Qe = getEdgeConstraints(Msh)
-        G     = getNodalGradientMatrix(Msh)
-        Nn,Qn = getNodalConstraints(Msh)
-        Nf,Qf = getFaceConstraints(Msh)
+	mu     = 4*pi*1e-7	
+	Curl   = getCurlMatrix(Msh)
+	Msig   = getEdgeMassMatrix(Msh,vec(sigma))
+	Mmu    = getFaceMassMatrix(Msh,1/mu*ones(size(sigma)))
+        Ne,Qe, = getEdgeConstraints(Msh)
+        G      = getNodalGradientMatrix(Msh)
+        Nn,Qn, = getNodalConstraints(Msh)
+        Nf,Qf, = getFaceConstraints(Msh)
         
         G     = Qe*G*Nn
         Curl  = Qf*Curl*Ne

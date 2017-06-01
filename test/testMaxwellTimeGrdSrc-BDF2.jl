@@ -2,6 +2,8 @@
 #source. Single source and multiple source configurations tested. Constant
 #time-step size used.
 
+@testset "Grd src BDF2 time-stepping" begin
+
 using MaxwellTime
 using JOcTree
 using Base.Test
@@ -29,12 +31,11 @@ nn   = size(Xn,1)
 # 
 # #First test that sensitivities from getSensMatVec and getSensTMatVec
 # #Match those computed from explicitly constructing J.
-nEx,nEy,nEz = getEdgeNumbering(Msh)
 Sources = zeros(ne)
 Tx = [1792.0 2048.0 1024.0;
       2048.0 2048.0 1024.0;]   
 
-Sources = getEdgeIntegralOfPolygonalChain(Msh,Tx,nEx,nEy,nEz)
+Sources = getEdgeIntegralOfPolygonalChain(Msh,Tx)
 
 #Setup receivers
 Iobs = round(Integer,ceil(Msh.ne[1]*rand(16)))
@@ -42,9 +43,10 @@ P    = speye(ne)
 P    = P[Iobs,:]
  
 #Time stepping
-dt      = 1e-4
 nt      = 4
-t       = [0.0;cumsum(dt*ones(nt))]
+dtvec   = 1e-4*ones(nt)
+dt      = dtvec[1]
+t       = [0.0;cumsum(dtvec)]
 wave    = zeros(nt+1)
 wave[1] = 1.0
 # 
@@ -54,11 +56,15 @@ b     = 10*rand(Msh.nc) - 4
 sigma = a.^b
  
 #Get data at initial model
-pFor   = getMaxwellTimeBDF2Param(Msh,Sources,P',dt,nt,wave)
+sourceType            = :Galvanic
+timeIntegrationMethod = :BDF2Const
+obsTimes              = t
+pFor                  = getMaxwellTimeParam(Msh,Sources,P',obsTimes,dtvec,wave,sourceType,
+                                            timeIntegrationMethod=timeIntegrationMethod)
 println("Getting data")
 d,pFor = getData(sigma,pFor)
 ew     = pFor.fields
-ehat   = pFor.ehat
+ehat   = pFor.AuxFields
 #u0     = [phi0;vec(ew[:,1,2:end])];
 
 #Form sensitivity matrix and related quantities
@@ -127,7 +133,7 @@ x       = rand(5*size(P,1))
 tmp     = -solveMUMPS(dCdu',Pj'*x)
 JtxMat  = dCdm'*tmp
 println("Getting MaxwellTime sens transpose mat vec product")
-#JtxStep,JtxDebug,rhs = getSensTMatVec(x,sigma,pFor)
+JtxStep,JtxDebug,rhs = getSensTMatVec(x,sigma,pFor)
 JtxStep = getSensTMatVec(x,sigma,pFor)
 errInfT = norm(JtxMat-JtxStep,Inf)/norm(JtxMat,Inf)
 errSL2T = norm(JtxMat-JtxStep)/norm(JtxMat)
@@ -150,11 +156,12 @@ Tx[:,:,2] = [2048.0 2304.0 1024.0;
              2304.0 2304.0 1024.0;]
        
 for i=1:ns
-  Sources[:,i] = getEdgeIntegralOfPolygonalChain(Msh,Tx[:,:,i],nEx,nEy,nEz)
+  Sources[:,i] = getEdgeIntegralOfPolygonalChain(Msh,Tx[:,:,i])
 end
 
 #Get data at initial model
-pFor   = pFor   = getMaxwellTimeBDF2Param(Msh,Sources,P',dt,nt,wave)
+pFor   = pFor   = getMaxwellTimeParam(Msh,Sources,P',obsTimes,dtvec,wave,sourceType,
+                                 timeIntegrationMethod=timeIntegrationMethod)
 println("Getting data")
 D,pFor = getData(sigma,pFor)
 
@@ -194,3 +201,5 @@ I2 = dot(JTz,z)
 println(I1,"      ",I2)
 println("Relative error:",abs(I1-I2)/abs(I1))
 @test abs(I1-I2)/abs(I1) < 1e-10
+
+end
