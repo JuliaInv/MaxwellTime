@@ -41,7 +41,7 @@ for i=1:ns
 				  pc[1]-10+flightPath[i]  pc[2]+10   pc[3]
 			  	  pc[1]+10+flightPath[i]  pc[2]+10   pc[3]
 			  	  pc[1]+10+flightPath[i]  pc[2]-10   pc[3]
-			     pc[1]-10+flightPath[i]  pc[2]-10   pc[3]] 
+			     pc[1]-10+flightPath[i]  pc[2]-10   pc[3]]
 
 
 	# Define receivers
@@ -49,7 +49,7 @@ for i=1:ns
         Sources[:,i] = P[:,i]
 end
 
-# t       = [1:6;]*1e-4 #[0; logspace(-6,-2,25)] #[0,1.3,2.7,4.5,6.4]*1e-8; #        
+# t       = [1:6;]*1e-4 #[0; logspace(-6,-2,25)] #[0,1.3,2.7,4.5,6.4]*1e-8; #
 # dt      = diff(t)
 dt       = (1e-4)*(1.25.^(0:5)).*ones(6)
 t        = cumsum(dt)
@@ -59,7 +59,7 @@ wave     = zeros(length(dt)+1); wave[1] = 1.0
 sigma   = zeros(M.nc)+1e-2
 sigma[Xc[:,3] .> 1024] = 1e-8
 
-sourceType = :Inductive
+sourceType = :InductiveDiscreteWire
 pFor = getMaxwellTimeParam(M,Sources,P,obsTimes,dt,wave,sourceType)
 
 tic()
@@ -77,7 +77,7 @@ function f(sigdum)
   d, = getData(sigdum,pFor)
   return d
 end
-  
+
 df(zdum,sigdum) = getSensMatVec(zdum,sigdum,pFor)
 pass,Error,Order = checkDerivativeMax(f,df,sigma;nSuccess=5,v=z)
 @test pass
@@ -92,7 +92,7 @@ function f(sigdum)
   d, = getData(sigdum,pForSE)
   return d
 end
-  
+
 df(zdum,sigdum) = getSensMatVec(zdum,sigdum,pForSE)
 pass,Error,Order = checkDerivativeMax(f,df,sigma;nSuccess=5,v=z)
 @test pass

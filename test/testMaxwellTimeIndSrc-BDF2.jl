@@ -42,13 +42,13 @@ for i=1:ns
 				  pc[1]-10+flightPath[i]  pc[2]+10   pc[3]
 			  	  pc[1]+10+flightPath[i]  pc[2]+10   pc[3]
 			  	  pc[1]+10+flightPath[i]  pc[2]-10   pc[3]
-			     pc[1]-10+flightPath[i]  pc[2]-10   pc[3]] 
+			     pc[1]-10+flightPath[i]  pc[2]-10   pc[3]]
 
 
 # 	a1           = magnetostaticsCurrentPoly(Xe1, p)
 # 	a2           = magnetostaticsCurrentPoly(Xe2, p)
 # 	a3           = magnetostaticsCurrentPoly(Xe3, p)
-# 	a            = [a1[:,1]; a2[:,2]; a3[:,3]] 
+# 	a            = [a1[:,1]; a2[:,2]; a3[:,3]]
 # 	Sources[:,i] = 1e8*Curl*a
 
 	# Define receivers
@@ -59,7 +59,7 @@ end
 dt0      = 1e-4
 nt       = 6
 dt       = dt0*ones(nt)
-t        = dt0*collect(0:nt) #[0; logspace(-6,-2,25)] #[0,1.3,2.7,4.5,6.4]*1e-8; #        
+t        = dt0*collect(0:nt) #[0; logspace(-6,-2,25)] #[0,1.3,2.7,4.5,6.4]*1e-8; #
 dt       = round(diff(t),8)
 obsTimes = cumsum(dt)
 wave = zeros(length(dt)+1); wave[1] = 1.0
@@ -67,7 +67,7 @@ wave = zeros(length(dt)+1); wave[1] = 1.0
 sigma   = zeros(M.nc)+1e-2
 sigma[Xc[:,3] .> 1024] = 1e-8
 
-sourceType = :Inductive
+sourceType = :InductiveDiscreteWire
 pFor = getMaxwellTimeParam(M,Sources,P,obsTimes,dt,wave,sourceType,timeIntegrationMethod=:BDF2Const)
 
 tic()
@@ -84,7 +84,7 @@ function f(sigdum)
   d, = getData(sigdum,pFor)
   return d
 end
-  
+
 df(zdum,sigdum) = getSensMatVec(zdum,sigdum,pFor)
 pass,Error,Order = checkDerivativeMax(f,df,sigma;nSuccess=5,v=z)
 @test pass
@@ -120,7 +120,7 @@ function f2(sigdum)
   d, = getData(sigdum,pFor)
   return d
 end
-  
+
 df2(zdum,sigdum) = getSensMatVec(zdum,sigdum,pFor)
 pass,Error,Order = checkDerivativeMax(f2,df2,sigma;nSuccess=4,v=z)
 @test pass

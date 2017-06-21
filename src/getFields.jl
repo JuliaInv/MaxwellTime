@@ -21,17 +21,17 @@ function getFieldsBE{T,N}(K::SparseMatrixCSC{T,N},
 
     # Unpack param
     storageLevel  = param.storageLevel
-    EMsolvers     = param.EMsolvers   
+    EMsolvers     = param.EMsolvers
     dt            = param.dt
     wave          = param.wave
     M             = param.Mesh
     ew            = param.fields
-    
+
     # Clear any factorizations still being stored
     for solver in EMsolvers
       solver.doClear = 1
     end
-    
+
     # Do the time-stepping
     iSolver = 0
     uniqueSteps = Vector{eltype(ew)}()
@@ -46,7 +46,7 @@ function getFieldsBE{T,N}(K::SparseMatrixCSC{T,N},
         # Solve the e-field update system. Msig and M left as inputs
         # in case iterative solver is used in the future. Currently, this code
         # only supports direct solvers
-        ew[:,:,i+1],EMsolvers[iSolver] = 
+        ew[:,:,i+1],EMsolvers[iSolver] =
             solveMaxTimeBE!(A,rhs,Msig,M,dt,i,storageLevel,
                             EMsolvers[iSolver])
     end
@@ -66,7 +66,7 @@ function getFieldsBDF2{T,N}(K::SparseMatrixCSC{T,N},
                             param::MaxwellTimeParam)
 
     error("BDF2 with variable step-size not implemented.\nUse timeIntegrationMethod :BDF2Const to use constant stepsize")
-                            
+
     # Unpack param
     storageLevel = param.storageLevel
     EMsolver     = param.EMsolvers[1]
@@ -75,11 +75,11 @@ function getFieldsBDF2{T,N}(K::SparseMatrixCSC{T,N},
     wave         = param.wave
     M            = param.Mesh
     ew           = param.fields
-    
+
     # BDF2 with step size dt has same matrix as backward Euler with
     # stepsize 2dt/3. To save a factorization (we're mostly concerned
     # with direct solvers here) we initialize the time-stepping by taking
-    # two BE steps to get to t=4dt/3 and then we use element-wise linear 
+    # two BE steps to get to t=4dt/3 and then we use element-wise linear
     # interpolation to compute electric field at t=dt
     EMsolver.doClear = 1
     A                = K + 3/(2*dt)*Msig
@@ -90,17 +90,17 @@ function getFieldsBDF2{T,N}(K::SparseMatrixCSC{T,N},
     ehat2,EMsolver   = solveMaxTime!(A,rhs,Msig,Msh,2/(3*dt),EMsolver)
     ew[:,:,2]        = 0.5*(ehat+ehat2)
     param.AuxFields  = ehat
-    
+
     #Continue time-stepping using BDF2 with constant step-size
     for i=2:nt
-      rhs = -3/(2*dt)*( (wave[i+1]-(4/3)*wave[i]+wave[i-1]/3)*s + 
+      rhs = -3/(2*dt)*( (wave[i+1]-(4/3)*wave[i]+wave[i-1]/3)*s +
                         Msig*(-4/3*ew[:,:,i] + ew[:,:,i-1]/3) )
       ew[:,:,i+1],EMsolver = solveMaxTime!(A,rhs,Msig,M,dt,EMsolver)
     end
     if storageLevel != :Factors
       clear!(EMsolver)
       EMsolver.doClear = 1
-    end   
+    end
     if storageLevel == :Matrices
         push!(param.Matrices,A)
     end
@@ -123,11 +123,11 @@ function getFieldsBDF2ConstDT{T,N}(K::SparseMatrixCSC{T,N},
     wave         = param.wave
     M            = param.Mesh
     ew           = param.fields
-    
+
     # BDF2 with step size dt has same matrix as backward Euler with
     # stepsize 2dt/3. To save a factorization (we're mostly concerned
     # with direct solvers here) we initialize the time-stepping by taking
-    # two BE steps to get to t=4dt/3 and then we use element-wise linear 
+    # two BE steps to get to t=4dt/3 and then we use element-wise linear
     # interpolation to compute electric field at t=dt
     EMsolver.doClear = 1
     A                = K + 3/(2*dt)*Msig
@@ -138,17 +138,17 @@ function getFieldsBDF2ConstDT{T,N}(K::SparseMatrixCSC{T,N},
     ehat2,EMsolver   = solveMaxTimeBDF2ConstDT!(A,rhs,Msig,M,2/(3*dt),EMsolver)
     ew[:,:,2]        = 0.5*(ehat+ehat2)
     param.AuxFields  = ehat
-    
+
     #Continue time-stepping using BDF2 with constant step-size
     for i=2:nt
-      rhs = -3/(2*dt)*( (wave[i+1]-(4/3)*wave[i]+wave[i-1]/3)*s + 
+      rhs = -3/(2*dt)*( (wave[i+1]-(4/3)*wave[i]+wave[i-1]/3)*s +
                         Msig*(-4/3*ew[:,:,i] + ew[:,:,i-1]/3) )
       ew[:,:,i+1],EMsolver = solveMaxTimeBDF2ConstDT!(A,rhs,Msig,M,dt,EMsolver)
     end
     if ~(storageLevel == :Factors)
       clear!(EMsolver)
       EMsolver.doClear = 1
-    end   
+    end
     if storageLevel == :Matrices
         push!(param.Matrices,A)
     end
@@ -159,53 +159,53 @@ end
 
 # A curiosity that seems to be unstable. May tinker with it at some point.
 function getFieldsTRBDF2{S<:Real}(sigma::Vector{S},mu::Vector{S},param::MaxwellTimeParam)
-    
+
     # Unpack param initialize electric field, and setup source
     M             = param.Mesh
     sourceType    = param.sourceType
     e             = param.fields
-    EMsolver      = param.EMsolvers    
+    EMsolver      = param.EMsolvers
     Matrices      = param.Matrices
-    
-    # Form conductivity edge mass matrix and 
+
+    # Form conductivity edge mass matrix and
     Ne,Qe,        = getEdgeConstraints(M)
     Msig          = getEdgeMassMatrix(M,sigma)
     Msig          = Ne'*Msig*Ne
-    
+
     # Restrict source to active (not hanging) edges
     s             = Ne'*param.Sources
-    
+
     # Initialize electric field
     ne            = size(Ne,2) #Number of active edges
     ns            = size(s,2)
     nt            = length(dt)+1
     e             = zeros(eltype(s),ne,ns,nt)
-    
+
     # Initialize matrix storage if needed. Note that matrices aren't reused and
     # thus don't need to be stored if factorizations are being stored.
     if storageLevel == :Matrices
         Matrices = Vector{SparseMatrixCSC{eltype(G.nzval),eltype(G.colptr)}}()
     end
-    
+
     # Get initial fields. They're zero for inductive sources
     if sourceType == :Galvanic
         param = getFieldsDC(Msig,param)
     end
-    
+
     # Form K = Curl'*Mmu*Curl
     K = getMaxwellCurlCurlMatrix(M,mu)
-    
+
     # Clear any factorizations still being stored
     for solver in EMsolvers
       solver.doClear = 1
     end
-    
+
     #Setup gamma related stuff
     gma     = 2-sqrt(2)
     gmaFctr = 2/(gma*dt)
     f1      = 1/(gma*(2-gma))
     f2      = ((1-gma)^2)/(gma*(2-gma))
-    
+
     # Do the time-stepping
     for i=1:nt
         #Trapezoidal rule to get e_(n+gma)
@@ -216,14 +216,14 @@ function getFieldsTRBDF2{S<:Real}(sigma::Vector{S},mu::Vector{S},param::MaxwellT
         end
         eGma,mySolver = solveMaxTime(A,rhs,Msig,Msh,dt,mySolver)
         mySolver.doClear = 0
-        
+
         #BDF-2 to get e_(n+1)
         wvGma = 0.0
         rhs = gmaFctr*( f1*Msig*eGma - f2*Msig*e[:,:,i] + (wvGma-wave[i]-wave[i+1])*s )
         e[:,:,i+1],mySolver = solveMaxTimeBDF2!(A,rhs,Msig,Msh,dt,mySolver)
     end
     mySolver.doClear = 1
-    
+
     return param
 end
 
@@ -234,21 +234,21 @@ end
 function getFieldsDC{T,N}(Msig::SparseMatrixCSC{T,N},
                           s::AbstractArray{T},
                           param::MaxwellTimeParam)
-                          
+
     M            = param.Mesh
     solver       = param.DCsolver
     storageLevel = param.storageLevel
     ew           = param.fields
     wave         = param.wave
-    
+
     solver.doClear = 1
-    
+
     G      = getNodalGradientMatrix(M)
     Nn,Qn, = getNodalConstraints(M)
     Ne,Qe, = getEdgeConstraints(M)
-    G      = Qe*G*Nn 
+    G      = Qe*G*Nn
     Adc    = G'*Msig*G
-    
+
     phi0,solver = solveDC!(Adc,wave[1]*G'*s,solver)
     ew[:,:,1]   = -G*phi0
     if storageLevel == :Factors
@@ -263,13 +263,13 @@ function getFieldsDC{T,N}(Msig::SparseMatrixCSC{T,N},
 end
 
 # Used only by sensitivity routines
-# Can unify the way DC is handled in forward and 
+# Can unify the way DC is handled in forward and
 # sensitivity routines after cleaning up how constraints
 # on derivative matrices are handled---hopefully by moving more
 # of that work into JOcTree
 function getDCmatrix{T<:Real,N}(Msig::SparseMatrixCSC{T,N},G::SparseMatrixCSC{T,N},
                        param::MaxwellTimeParam)
-    
+
     storageLevel = param.storageLevel
     if storageLevel == :Matrices
         A = param.Matrices[1]
@@ -281,7 +281,7 @@ function getDCmatrix{T<:Real,N}(Msig::SparseMatrixCSC{T,N},G::SparseMatrixCSC{T,
     return A
 end
 
-function getMaxwellCurlCurlMatrix(M::AbstractMesh,mu)	
+function getMaxwellCurlCurlMatrix(M::AbstractMesh,mu)
     Curl   = getCurlMatrix(M)
     Mmu    = getFaceMassMatrix(M,1./mu)
     Nf,Qf, = getFaceConstraints(M)
@@ -292,10 +292,18 @@ function getMaxwellCurlCurlMatrix(M::AbstractMesh,mu)
     return K
 end
 
+function getMaxwellCurlCurlMatrix!(param::MaxwellTimeParam,model::MaxwellTimeModel)
+    if isempty(param.K) || model.invertMu
+        K = getMaxwellCurlCurlMatrix(param.Mesh,model.mu)
+        param.K = K
+    end
+    return param.K
+end
+
 function getBEMatrix!{T,N}(dt::T,A::SparseMatrixCSC{T,N},
                            K::SparseMatrixCSC{T,N},Msig::SparseMatrixCSC{T,N},
                            param::MaxwellTimeParam,uniqueSteps::Vector{T})
-                           
+
     storageLevel = param.storageLevel
     if ~in(dt,uniqueSteps)
         push!(uniqueSteps,dt)

@@ -18,44 +18,44 @@ return data and param.
 
 Input:
 
-      model::MaxwellTimeModel--Composite type containing conductivity 
+      model::MaxwellTimeModel--Composite type containing conductivity
                                and permeability. Conductivity can be isotropic,
                                diagonally anisotropic or generally anisotropic.
                                Permeability may be isotropic or diagonally
                                anisotropic.
-      param::MaxwellTimeParam--Contains structures and information needed to 
+      param::MaxwellTimeParam--Contains structures and information needed to
                                construct and solve Maxwell's equations such
                                as a mesh, a source, and time steps. For a full
                                description see the MaxwellTimeParam documentation.
-                               
-      
-      Output: 
-      
+
+
+      Output:
+
              D::Array--Data, computed by applying the observation matrix
                        to the electric fields at each time step. For more
                        information on the observation matrix see the
                        MaxwellTimeParam documentation.
-                       
+
              param::MaxwellTimeParam--param is returned modified. It may store
                     matrix factorizations and the electric fields for further
                     use in sensitivity computations.
 """
 function getData(model::MaxwellTimeModel,param::MaxwellTimeParam,doClear::Bool=false)
-#function getData(sigma,param)   
-        
+#function getData(sigma,param)
+
     # Unpack model into conductivity and magnetic permeability
     sigma = model.sigma
     mu    = model.mu
-    
+
     #Unpack param
     M             = param.Mesh
     sourceType    = param.sourceType
     storageLevel  = param.storageLevel
-    EMsolver      = param.EMsolvers   
+    EMsolver      = param.EMsolvers
     dt            = param.dt
     s             = param.Sources
-    
-    # Check model input 
+
+    # Check model input
     in(length(sigma),[M.nc; 3*M.nc; 6*M.nc]) || error("MaxwellTime.getData: Invalid length of sigma")
     if length(mu) == 6*M.nc
         error("MaxwellTime.getData: Generally anisotropic permeability not supported")
@@ -67,45 +67,45 @@ function getData(model::MaxwellTimeModel,param::MaxwellTimeParam,doClear::Bool=f
     if param.sensitivityMethod == :Explicit
         param.Sens = Array{eltype(sigma),2}() #Empty 2D array
     end
-    
+
     # Form conductivity edge mass matrix
     Ne,Qe, = getEdgeConstraints(M)
     Msig   = getEdgeMassMatrix(M,sigma)
     Msig   = Ne'*Msig*Ne
-    
+
     # Form K = Curl'*Mmu*Curl
-    K = getMaxwellCurlCurlMatrix(M,mu)
-    
+    K = getMaxwellCurlCurlMatrix!(param,model)
+
     # Initialize electric field storage
     ne            = size(Ne,2) #Number of active edges
     ns            = size(s,2)
     nt            = length(dt)+1
     param.fields  = zeros(eltype(s),ne,ns,nt)
     e             = param.fields
-    
+
     # Initialize matrix storage if needed. Note that if a direct solver is
-    # being used and factorizatons are being stored, then matrices don't 
+    # being used and factorizatons are being stored, then matrices don't
     # need to be stored
     if storageLevel == :Matrices
         param.Matrices = Vector{SparseMatrixCSC{eltype(K.nzval),eltype(K.colptr)}}()
         Matrices       = param.Matrices
     end
-    
+
     # Get initial fields. They're zero for inductive sources
     if sourceType == :Galvanic
         param = getFieldsDC(Msig,s,param)
     end
-        
+
     # Compute the electric fields at times [cumsum(dt)]
     # param.timeIntegrationMethod is a symbol. See supportedIntegrationMethods
     # in MaxwellTime.jl for valid options.
     # integrationFunctions is a dictionary that maps timeIntegrationMethod
-    # symbols to their corresponding getTransientFields<IntegrationMethod> 
+    # symbols to their corresponding getTransientFields<IntegrationMethod>
     # functions.
     getTransientFields  = integrationFunctions[param.timeIntegrationMethod]
     param               = getTransientFields(K,Msig,s,param)
-    
-    
+
+
     # Compute the data from the fields, at the times the fields
     # are computed at, then interpolate the data to the observation times.
     # Note (for grounded sources) that DC data
@@ -129,6 +129,6 @@ function getData(model::MaxwellTimeModel,param::MaxwellTimeParam,doClear::Bool=f
     # Interpolate to the observation times
     nTmpData = nr*ns*nt
     D        = param.ObsTimes*reshape(Dtmp,nTmpData)
-    
+
     return D, param
 end

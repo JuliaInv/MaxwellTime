@@ -31,7 +31,7 @@ function getSensTMatVec{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
             end
             param.Sens = J
             param.fields=[]
-	end	
+	end
 	JTz = param.Sens'*z
 	return MaxwellTimeModel(JTz,JTz,model.invertSigma,model.invertMu)
     else # Implicit sensitivities
@@ -41,27 +41,27 @@ function getSensTMatVec{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
         return sensTFunc(z,model,param)
     end
 end
-    
+
 function getSensTMatVecBE{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
                                    param::MaxwellTimeParam)
     #getSensTMatVec(z,sigma,param)
     #This function computes (dData/dsigma)^T*z for BE time-stepping
-    #forward problem. It handles grounded and inductive sources, 
-    #assuming DC data is integral of electric field and not a 
-    #potential difference (i.e. electric field at t=0 is known) for  
+    #forward problem. It handles grounded and inductive sources,
+    #assuming DC data is integral of electric field and not a
+    #potential difference (i.e. electric field at t=0 is known) for
     #grounded sources and e0=0 for inductive sources.
     # magnetic permeability
-	
+
     # Unpack model into conductivity and magnetic permeability
     sigma       = model.sigma
     mu          = model.mu
     invertSigma = model.invertSigma
-    invertMu    = model.invertMu	
+    invertMu    = model.invertMu
 
     #Unpack param
     M             = param.Mesh
     storageLevel  = param.storageLevel
-    EMsolvers     = param.EMsolvers   
+    EMsolvers     = param.EMsolvers
     dt            = param.dt
     ew            = param.fields
     s             = param.Sources
@@ -80,7 +80,7 @@ function getSensTMatVecBE{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
         DmuinvDmu = spdiagm(-1./(mu.^2))
     end
     if param.storageLevel == :None
-        K = Curl'*Mmu*Curl
+        K = getMaxwellCurlCurlMatrix!(param,model)
     else
         K = spzeros(T,0,0)
     end
@@ -91,11 +91,11 @@ function getSensTMatVecBE{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
     nt  = length(dt)
     nr  = size(P,2)
     lam = zeros(T,ne,ns,2)
-    
+
     # Multiply by transpose of time interpolation matrix
     # To map from data space to data at all times space
     ptz = param.ObsTimes'*z
-    
+
     # Check source type
     groundedSource = param.sourceType == :Galvanic ? true : false
     if groundedSource
@@ -111,31 +111,31 @@ function getSensTMatVecBE{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
             pz[:,:,j] = P*ptz[:,:,j]
         end
     end
-    
+
     JTvSigma    = zeros(T,length(sigma))
     JTvMu       = zeros(T,length(mu))
     dt          = [dt[:];dt[end]]
     uniqueSteps = unique(dt)
     A           = spzeros(T,0,0)
     iSolver     = 0
-    dtLast      = -1.0 # Size of last time step, used to check if 
+    dtLast      = -1.0 # Size of last time step, used to check if
                       # factorization of Forward mod. matrix is needed.
     for i=length(dt)-1:-1:1
         if dt[i] != dtLast
             A,iSolver = getBEMatrix!(dt[i],A,K,Msig,param,uniqueSteps)
         end
-        
+
         rhs = pz[:,:,i] + 1/dt[i+1]*Msig*lam[:,:,2]
         lam[:,:,1],EMsolvers[iSolver] = solveMaxTimeBE!(A,rhs,Msig,M,dt,i,storageLevel,
                                                          EMsolvers[iSolver])
         for j = 1:ns
             if invertSigma
                 Gzi        = (1/dt[i])*getdEdgeMassMatrix(M,Ne*(ew[:,j,i+1]-ew[:,j,i]))
-                JTvSigma   = JTvSigma - Gzi'*(Ne*lam[:,j,1])  
+                JTvSigma   = JTvSigma - Gzi'*(Ne*lam[:,j,1])
             end
             if invertMu
                 Gzi        = getdFaceMassMatrix(M,mu,Nf*Curl*ew[:,j,i+1])*DmuinvDmu
-                JTvMu      = JTvMu - Gzi'*(Nf*Curl*lam[:,j,1])  
+                JTvMu      = JTvMu - Gzi'*(Nf*Curl*lam[:,j,1])
             end
         end
         lam[:,:,2] = lam[:,:,1]
@@ -146,8 +146,8 @@ function getSensTMatVecBE{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
           clear!(EMsolver)
           solver.doClear = 1
         end
-    end 
-    
+    end
+
     #Do the DC part if source is grounded.
     #Note that this code assumes (for grounded sources) that DC data
     #Are computed as the integral of electric field over a receiver
@@ -179,9 +179,9 @@ function getSensTMatVecBDF2ConstDT{T<:Real}(z::Vector{T},model::MaxwellTimeModel
                                    param::MaxwellTimeParam)
 	#getSensTMatVec(z,sigma,param)
 	#This function computes (dData/dsigma)^T*z for BDF2 time-stepping
-	#forward problem. It handles grounded and inductive sources, 
-	#assuming DC data is integral of electric field and not a 
-	#potential difference (i.e. electric field at t=0 is known) for  
+	#forward problem. It handles grounded and inductive sources,
+	#assuming DC data is integral of electric field and not a
+	#potential difference (i.e. electric field at t=0 is known) for
 	#grounded sources and e0=0 for inductive sources. FE is used
 	#for first time step.
 
@@ -189,8 +189,8 @@ function getSensTMatVecBDF2ConstDT{T<:Real}(z::Vector{T},model::MaxwellTimeModel
     sigma       = model.sigma
     mu          = model.mu
     invertSigma = model.invertSigma
-    invertMu    = model.invertMu	
-    
+    invertMu    = model.invertMu
+
     if invertMu
         error("Inverting for mu with bdf2 time-stepping not yet supported")
     end
@@ -226,14 +226,14 @@ function getSensTMatVecBDF2ConstDT{T<:Real}(z::Vector{T},model::MaxwellTimeModel
     nt  = length(param.dt)
     nr  = size(P,2)
     lam = zeros(T,ne,ns,3)
-	
+
     # Multiply by transpose of time interpolation matrix
     # To map from data space to data at all times space
     ptz = param.ObsTimes'*z
-	
+
     # Check source type
     groundedSource = param.sourceType == :Galvanic ? true : false
-	
+
     if groundedSource
       ptz  = reshape(ptz,nr,ns,nt+1)
       pz   = zeros(T,ne,ns,nt)
@@ -251,7 +251,7 @@ function getSensTMatVecBDF2ConstDT{T<:Real}(z::Vector{T},model::MaxwellTimeModel
         end
       end
     end
-	
+
 #     JTvSigma = 0
 #     JTvMu    = 0
     JTv = 0
@@ -262,15 +262,15 @@ function getSensTMatVecBDF2ConstDT{T<:Real}(z::Vector{T},model::MaxwellTimeModel
         if norm(rhs) > 1e-20
           lam[:,j,1],EMsolver = solveMaxTimeBDF2ConstDT!(A,rhs,Msig,M,dt,EMsolver)
           EMsolver.doClear = 0
-        end	
+        end
         Gzi = (1/dt)*getdEdgeMassMatrix(M,Ne*(1.5*ew[:,j,i+1]-2*ew[:,j,i]+
-                                        0.5*ew[:,j,i-1])) 
+                                        0.5*ew[:,j,i-1]))
         JTv = JTv - Gzi'*(Ne*lam[:,j,1])
         lam[:,j,3] = lam[:,j,2]
         lam[:,j,2] = lam[:,j,1]
       end
     end
-    
+
     #Do first time step stuff.
     for j = 1:ns
       rhs                 = pz[:,j,1] + 1/dt*Msig*(2*lam[:,j,2]-0.5*lam[:,j,3])
@@ -280,7 +280,7 @@ function getSensTMatVecBDF2ConstDT{T<:Real}(z::Vector{T},model::MaxwellTimeModel
       lam[:,j,3]          = lam[:,j,2]
       lam[:,j,2]          = lam[:,j,1]
     end
-    
+
     #Do ehat stuff
     lmTmp = zeros(size(lam,1),ns)
     for j = 1:ns
@@ -293,8 +293,8 @@ function getSensTMatVecBDF2ConstDT{T<:Real}(z::Vector{T},model::MaxwellTimeModel
       clear!(EMsolver)
       EMsolver.doClear = 1
     end
-    
-    #Do the DC part if source is grounded. 
+
+    #Do the DC part if source is grounded.
     #Note that this code assumes (for grounded sources) that DC data
     #Are computed as the integral of electric field over a receiver
     #dipole and not as a potential difference
@@ -307,7 +307,7 @@ function getSensTMatVecBDF2ConstDT{T<:Real}(z::Vector{T},model::MaxwellTimeModel
         for j = 1:ns
             rhs           = -G'*P*ptz[:,j,1] +
                              1/(2*dt)*G'*Msig*lam[:,j,3] -
-                             3/(4*dt)*G'*Msig*lam[:,j,2] - 
+                             3/(4*dt)*G'*Msig*lam[:,j,2] -
                              3/(2*dt)*G'*Msig*lmTmp[:,j]
             lam0,DCsolver = solveDC!(A,rhs,DCsolver)
             Gzi           = getdEdgeMassMatrix(M,-Ne*ew[:,j,1])
