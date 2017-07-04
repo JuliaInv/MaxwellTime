@@ -60,7 +60,7 @@ dt0      = 1e-4
 nt       = 6
 dt       = dt0*ones(nt)
 t        = dt0*collect(0:nt) #[0; logspace(-6,-2,25)] #[0,1.3,2.7,4.5,6.4]*1e-8; #
-dt       = round(diff(t),8)
+dt       = round.(diff(t),8)
 obsTimes = cumsum(dt)
 wave = zeros(length(dt)+1); wave[1] = 1.0
 

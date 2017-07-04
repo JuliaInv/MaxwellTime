@@ -67,7 +67,7 @@ function getData(model::MaxwellTimeModel,param::MaxwellTimeParam,doClear::Bool=f
 
     # If explicit sensitivities are being used, clear them
     if param.sensitivityMethod == :Explicit
-        param.Sens = Array{eltype(sigma),2}() #Empty 2D array
+        param.Sens = Array{eltype(sigma),2}(0,0) #Empty 2D array
     end
 
     # Form conductivity edge mass matrix

@@ -30,20 +30,22 @@ type MaxwellTimeParam{S<:Real,T<:AbstractSolver,U<:AbstractSolver} <: ForwardPro
     # Use custom constructors to allow creation of objects with
     # Matrices, fields, explicit sensitivity matrix, and possibly K
     # left uninitialized
-    MaxwellTimeParam(Mesh::AbstractMesh,Sources::AbstractArray{S},Obs::AbstractArray{S},
+    MaxwellTimeParam{S,T,U}(Mesh::AbstractMesh,Sources::AbstractArray{S},Obs::AbstractArray{S},
                      ObsTimes::AbstractArray{S},dt::Vector{S},wave::Vector{S},sourceType::Symbol,
                      storageLevel::Symbol,sensitivityMethod::Symbol,
                      timeIntegrationMethod::Symbol,EMsolvers::Vector{T},
-                     DCsolver::U) = new(Mesh,Sources,Obs,ObsTimes,dt,wave,sourceType,
-                                     storageLevel,sensitivityMethod,
-                                     timeIntegrationMethod,
-                                     EMsolvers,DCsolver)
+                     DCsolver::U) where {S<:Real,T<:AbstractSolver,U<:AbstractSolver} = new(
+                                        Mesh,Sources,Obs,ObsTimes,dt,wave,sourceType,
+                                        storageLevel,sensitivityMethod,
+                                        timeIntegrationMethod,
+                                        EMsolvers,DCsolver)
 
-    MaxwellTimeParam(Mesh::AbstractMesh,Sources::AbstractArray{S},Obs::AbstractArray{S},
+    MaxwellTimeParam{S,T,U}(Mesh::AbstractMesh,Sources::AbstractArray{S},Obs::AbstractArray{S},
                      ObsTimes::AbstractArray{S},dt::Vector{S},wave::Vector{S},sourceType::Symbol,
                      storageLevel::Symbol,sensitivityMethod::Symbol,
                      timeIntegrationMethod::Symbol,EMsolvers::Vector{T},
-                     DCsolver::U,K::SparseMatrixCSC) = new(
+                     DCsolver::U,K::SparseMatrixCSC) where
+                     {S<:Real,T<:AbstractSolver,U<:AbstractSolver} = new(
                                      Mesh,Sources,Obs,ObsTimes,dt,wave,
                                      sourceType,storageLevel,sensitivityMethod,
                                      timeIntegrationMethod,

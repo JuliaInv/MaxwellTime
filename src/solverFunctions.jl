@@ -1,11 +1,11 @@
 export solveMaxTimeBE!, solveMaxTimeBDF2ConstDT!, solveDC!
 
-typealias directSolver Union{MUMPSsolver,jInvPardisoSolver,JuliaSolver}
+const directSolver = Union{MUMPSsolver,jInvPardisoSolver,JuliaSolver}
 
 """
 function solveMaxTimeBE!(A,rhs,Msig,M::AbstractMesh,dt::Vector{Real},it::Integer,
                       storageLevel::Symbol,linSolParam::directSolver,flag=0)
-                      
+
 Solve the maxwell system using selected direct solver
 """
 function solveMaxTimeBE!{T<:Real}(A,rhs,Msig,M::AbstractMesh,dt::Vector{T},it::Integer,
@@ -22,7 +22,7 @@ end
 function solveMaxTimeBDF2ConstDT!(A,rhs,Msig,
                            M::AbstractMesh,dt::Real,
                            linSolParam::directSolver,flag=0)
-#= 
+#=
  	Solve the maxwell system using MUMPS or Pardiso
 
  	en, = solveMaxTimeBDF2ConstDT!(A,rhs,Msig,M::AbstractMesh,w::Real,linSolParam::Union{MUMPSsolver,jInvPardisoSolver},flag=0)
@@ -30,7 +30,7 @@ function solveMaxTimeBDF2ConstDT!(A,rhs,Msig,
 =#
   X              = zeros(size(rhs))
   X, linSolParam = solveLinearSystem!(A,rhs,X,linSolParam,flag)
-  
+
 
 return X, linSolParam
 end
@@ -44,7 +44,7 @@ function solveDC!(A,rhs,linSolParam::directSolver,flag=0)
 
   X              = zeros(size(rhs))
   X, linSolParam = solveLinearSystem!(A,rhs,X,linSolParam,flag)
-  
+
 
   return X, linSolParam
 end
@@ -65,16 +65,16 @@ end
 #   Ne,Qe = getEdgeConstraints(M)
 #   Nn,   = getNodalConstraints(M)
 #   Grad  = Qe*Grad*Nn
-#   
+#
 #   muInvCells = Ane'*(Ace'*v)
 #   Mmuinvn    = Nn'*sdiag(muInvCells)*Nn
-#   
+#
 #   STBa = Grad*Mmuinvn*Grad'
-#   Aap = [A + STBa          1/dt*Msig*Grad; 
+#   Aap = [A + STBa          1/dt*Msig*Grad;
 #   		1/dt*Grad'*Msig    1/dt*Grad'*Msig*Grad];
-#   
+#
 #   Map(x) = ssor(Aap,x,out=-1)[1]
-#   
+#
 #   P  = [speye(size(A,2)); Grad']
 #   MM(x) = P'*Map(P*x)
 #   en, = solveLinearSystem(A,rhs,linSolParam,flag)
@@ -92,20 +92,18 @@ end
 #   Ne,Qe = getEdgeConstraints(M)
 #   Nn,   = getNodalConstraints(M)
 #   Grad  = Qe*Grad*Nn
-#   
+#
 #   muInvCells = Ane'*(Ace'*v)
 #   Mmuinvn    = Nn'*sdiag(muInvCells)*Nn
-#   
+#
 #   STBa = Grad*Mmuinvn*Grad'
-#   Aap = [A + STBa          1/dt*Msig*Grad; 
+#   Aap = [A + STBa          1/dt*Msig*Grad;
 #   		1/dt*Grad'*Msig    1/dt*Grad'*Msig*Grad];
-#   
+#
 #   Map(x) = ssor(Aap,x,out=-1)[1]
-#   
+#
 #   P  = [speye(size(A,2)); Grad']
 #   MM(x) = P'*Map(P*x)
 #   en, = solveLinearSystem!(A,rhs,linSolParam,flag)
 #   return en, linSolParam
 # end
-
-
