@@ -216,7 +216,7 @@ function getMaxwellTimeParam{S<:Real}(Mesh::AbstractMesh,
 
     if sourceType == :InductiveAnalyticLoop
         K = getMaxwellCurlCurlMatrix(Mesh,fill(pi*4e-7,Mesh.nc))
-        s = K*s
+        s = -K*s
         return MaxwellTimeParam(Mesh,s,Obs,ObsTimeMat,dt,wave,sourceType,storageLevel,
                                 sensitivityMethod,timeIntegrationMethod,
                                 EMsolvers,DCsolver,K)
