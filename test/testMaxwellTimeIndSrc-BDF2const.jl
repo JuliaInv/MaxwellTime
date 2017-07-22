@@ -5,7 +5,7 @@ using jInv.Utils
 using MUMPS
 using jInv.LinearSolvers
 
-@testset "Ind src BDF2 time-stepping" begin
+@testset "Ind src BDF2 constant step-size" begin
 
 L  = [4096, 4096, 2048.0]
 x0 = [0.0,  0.0,  0.0]

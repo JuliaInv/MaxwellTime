@@ -2,7 +2,7 @@
 #source. Single source and multiple source configurations tested. Constant
 #time-step size used.
 
-@testset "Grd src BDF2 time-stepping" begin
+@testset "Grd src BDF2 variable step-size" begin
 
 using MaxwellTime
 using JOcTree
@@ -43,10 +43,12 @@ P    = speye(ne)
 P    = P[Iobs,:]
 
 #Time stepping
+dt0     = 1e-4
 nt      = 4
-dtvec   = 1e-4*ones(nt)
-dt      = dtvec[1]
-t       = [0.0;cumsum(dtvec)]
+#dt      = dt0*ones(nt)
+dt      = dt0*cumprod([1.0;1.25*ones(nt-1)])
+#dt       = dt0*[1.0;1.0;1.0;1.25^2]
+t       = [0;cumsum(dt)]
 wave    = zeros(nt+1)
 wave[1] = 1.0
 #
@@ -57,15 +59,15 @@ sigma = a.^b
 
 #Get data at initial model
 sourceType            = :Galvanic
-timeIntegrationMethod = :BDF2Const
+timeIntegrationMethod = :BDF2
 obsTimes              = t
-pFor                  = getMaxwellTimeParam(Msh,Sources,P',obsTimes,dtvec,wave,sourceType,
+pFor                  = getMaxwellTimeParam(Msh,Sources,P',obsTimes,dt,wave,sourceType,
                                             timeIntegrationMethod=timeIntegrationMethod)
+pFor.cgTol = 1e-15
 println("Getting data")
 d,pFor = getData(sigma,pFor)
 ew     = pFor.fields
 ehat   = pFor.AuxFields
-#u0     = [phi0;vec(ew[:,1,2:end])];
 
 #Form sensitivity matrix and related quantities
 println("Forming sensitivity matrix")
@@ -85,26 +87,43 @@ G    = Qe*G*Nn
 nen  = size(Ne,2)
 nnn  = size(Nn,2)
 
-dCdm   = [G'*Ne'*getdEdgeMassMatrix(Msh,-Ne*ew[:,1,1]);
-          Ne'*getdEdgeMassMatrix(Msh,3/(2*dt)*Ne*(ehat[:,1]-ew[:,1,1]));
-          Ne'*getdEdgeMassMatrix(Msh,1/dt*Ne*(1.5*ew[:,1,2]-0.75*ehat[:,1]-0.75*ew[:,1,1]));
-          Ne'*getdEdgeMassMatrix(Msh,1/dt*Ne*(3/2*ew[:,1,3]-2*ew[:,1,2]+1/2*ew[:,1,1]));
-          Ne'*getdEdgeMassMatrix(Msh,1/dt*Ne*(3/2*ew[:,1,4]-2*ew[:,1,3]+1/2*ew[:,1,2]));
-          Ne'*getdEdgeMassMatrix(Msh,1/dt*Ne*(3/2*ew[:,1,5]-2*ew[:,1,4]+1/2*ew[:,1,3]));]
-
 blnkn = spzeros(nnn,5*nen)
 blnkee = spzeros(nen,nen)
 blnken = spzeros(nen,nnn)
 K     = Curl'*Mmu*Curl
-A     = K + 3/(2*dt)*Msig
+tau   = dt[2:end]./dt[1:end-1]
+g12   = (1 + 2*tau[1])/(1+tau[1])
+g13   = (1 + 2*tau[2])/(1+tau[2])
+g14   = (1 + 2*tau[3])/(1+tau[3])
+g22   = 1 + tau[1]
+g23   = 1 + tau[2]
+g24   = 1 + tau[3]
+g32   = (tau[1]^2)/(1+tau[1])
+g33   = (tau[2]^2)/(1+tau[2])
+g34   = (tau[3]^2)/(1+tau[3])
+A1    = K + 3/(2*dt[1])*Msig
+A2    = K + g12/dt[2]*Msig
+A3    = K + g13/dt[3]*Msig
+A4    = K + g14/dt[4]*Msig
 dCdu  = [G'*Msig*G blnkn;
-         3/(2*dt)*Msig*G A blnkee blnkee blnkee blnkee;
-         3/(4*dt)*Msig*G -3/(4*dt)*Msig A blnkee blnkee blnkee;
-         -1/(2*dt)*Msig*G blnkee -2/dt*Msig A blnkee blnkee;
-         blnken blnkee 1/(2*dt)*Msig -2/dt*Msig A blnkee;
-         blnken blnkee blnkee 1/(2*dt)*Msig -2/dt*Msig A]
-#
-# q = [G'*Ne'*Sources;zeros(4*size(ew,1))]
+         3/(2*dt[1])*Msig*G A1 blnkee blnkee blnkee blnkee;
+         3/(4*dt[1])*Msig*G -3/(4*dt[1])*Msig A1 blnkee blnkee blnkee;
+         -g32/(dt[2])*Msig*G blnkee -g22/dt[2]*Msig A2 blnkee blnkee;
+         blnken blnkee g33/(dt[3])*Msig -g23/dt[3]*Msig A3 blnkee;
+         blnken blnkee blnkee g34/(dt[4])*Msig -g24/dt[4]*Msig A4]
+
+dCdm   = [G'*Ne'*getdEdgeMassMatrix(Msh,-Ne*ew[:,1,1]);
+          Ne'*getdEdgeMassMatrix(Msh,3/(2*dt[1])*Ne*(ehat[:,1]-ew[:,1,1]));
+          Ne'*getdEdgeMassMatrix(Msh,1/dt[1]*Ne*(1.5*ew[:,1,2]-0.75*ehat[:,1]-0.75*ew[:,1,1]));
+          Ne'*getdEdgeMassMatrix(Msh,1/dt[2]*Ne*(g12*ew[:,1,3]-g22*ew[:,1,2]+g32*ew[:,1,1]));
+          Ne'*getdEdgeMassMatrix(Msh,1/dt[3]*Ne*(g13*ew[:,1,4]-g23*ew[:,1,3]+g33*ew[:,1,2]));
+          Ne'*getdEdgeMassMatrix(Msh,1/dt[4]*Ne*(g14*ew[:,1,5]-g24*ew[:,1,4]+g34*ew[:,1,3]));]
+
+phi0 = solveMUMPS(G'*Msig*G,G'*Ne'*Sources,1)
+u0   = [phi0;ehat;vec(ew[:,1,2:end])];
+q = [G'*Ne'*Sources;zeros(5*size(ew,1))]
+
+
 
 # println("--------test dCdm---------------")
 # v = rand(size(sigma))*1e-2; v[sigma.<0.009] = 0;
@@ -133,8 +152,8 @@ x       = rand(5*size(P,1))
 tmp     = -solveMUMPS(dCdu',Pj'*x)
 JtxMat  = dCdm'*tmp
 println("Getting MaxwellTime sens transpose mat vec product")
-JtxStep,JtxDebug,rhs = getSensTMatVec(x,sigma,pFor)
 JtxStep = getSensTMatVec(x,sigma,pFor)
+#JtxStep,JtxDebug = getSensTMatVec(x,sigma,pFor)
 errInfT = norm(JtxMat-JtxStep,Inf)/norm(JtxMat,Inf)
 errSL2T = norm(JtxMat-JtxStep)/norm(JtxMat)
 @test errSL2T < 1e-9
@@ -160,8 +179,9 @@ for i=1:ns
 end
 
 #Get data at initial model
-pFor   = pFor   = getMaxwellTimeParam(Msh,Sources,P',obsTimes,dtvec,wave,sourceType,
+pFor   = pFor   = getMaxwellTimeParam(Msh,Sources,P',obsTimes,dt,wave,sourceType,
                                  timeIntegrationMethod=timeIntegrationMethod)
+pFor.cgTol = 1e-15
 println("Getting data")
 D,pFor = getData(sigma,pFor)
 

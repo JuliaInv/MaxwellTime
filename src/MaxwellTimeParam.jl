@@ -21,6 +21,7 @@ type MaxwellTimeParam{S<:Real,T<:AbstractSolver,U<:AbstractSolver} <: ForwardPro
     Matrices::Vector{SparseMatrixCSC}
     fields::Array{S}
     Sens::Array{S}
+    cgTol::S  #Only used by BDF2. Tolerance for cg solves used when stepsize changes
     AuxFields::Array{S} # Stores extra electric fields outside
                         # of regular time-stepping. Currently used
                         # to initialize BDF2 time stepping without additional BE

@@ -60,18 +60,19 @@ function getSensMatVec(DsigDmz::MaxwellTimeModel,model::MaxwellTimeModel,
             nt = length(param.dt)
             ns = size(param.Sources,2)
             nr = size(param.Obs,2)
-            J  = zeros(nt*ns*nr, length(mod))
+            J  = zeros(size(param.ObsTimes,1), length(mod))
+            sensTFunc = sensitivityTFunctions[param.timeIntegrationMethod]
             for k=1:size(J,1)
-            	v        = zeros(nt*ns*nr)
+            	v        = zeros(size(param.ObsTimes,1))
             	v[k]     = 1.0
-            	JTvStruc = getSensTMatVec(v,model,param)
+            	JTvStruc = sensTFunc(v,model,param)
             	JTv      = model.invertSigma ? JTvStruc.sigma : JTvStruc.mu
             	J[k,:] = vec(JTv)
             end
             param.Sens = J
             param.fields=[]
 	end
-	z = invertSigma ? zsig : zmu
+	z = model.invertSigma ? zsig : zmu
 	return param.Sens*z
     else # Implicit sensitivities
         # Dispatch based on forward modelling integration method,
@@ -207,7 +208,7 @@ function getSensMatVecBE{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
     end
     if storageLevel != :Factors
         for solver in EMsolvers
-          clear!(EMsolvers)
+          clear!(solver)
           solver.doClear = 1
         end
     end
@@ -261,8 +262,163 @@ end
 
 function getSensMatVecBDF2{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
                                     model::MaxwellTimeModel,param::MaxwellTimeParam)
-    error("Sensitivities for variable step-size bdf2 not implemented")
-end
+    #getSensMatVec(z,sigma,param)
+    #This function computes (dData/dsigma)*z for BDF2 time-stepping
+    #forward problem with constant step-size. It handles grounded
+    #and inductive sources, assuming DC data is integral of electric
+    #field and not a potential difference (i.e. electric field at t=0
+    #is known) for grounded sources and e0=0 for inductive sources.
+    #e_1 is computed by interpolation between two be steps of size
+    #2*dt/3. For grounded sources:
+    #dCdu= |G'*Msig*G                                                            |
+    #      |(-dt*K + Msig)*G Msig                                                |
+    #      |1/(2*dt)*Msig*G  -2/dt*Msig      K+3/(2*dt)*Msig                     |
+    #      |                 1/(2*dt)*Msig  -2/dt*Msig        K+3/(2*dt)*Msig ...|
+    #      |                      .                                              |
+    #      |                      .                                              |
+    #      |                      .                                              |
+    # Unpack model into conductivity and magnetic permeability
+    sigma       = model.sigma
+    mu          = model.mu
+    invertSigma = model.invertSigma
+    invertMu    = model.invertMu
+
+    #Unpack param
+    Mesh         = param.Mesh
+    storageLevel = param.storageLevel
+    EMsolvers    = param.EMsolvers
+    dt           = param.dt
+    ew           = param.fields
+    ehat         = param.AuxFields
+    s            = param.Sources
+
+    # Get matrices
+    Ne,Qe, = getEdgeConstraints(Mesh)
+    Msig   = getEdgeMassMatrix(Mesh,vec(sigma))
+    Msig   = Ne'*Msig*Ne
+    P      = Ne'*param.Obs
+    if invertMu || (param.storageLevel == :None)
+        Nf,Qf, = getFaceConstraints(Mesh)
+        Curl   = getCurlMatrix(Mesh)
+        Curl   = Qf*Curl*Ne
+        Mmu    = getFaceMassMatrix(Mesh,1./mu)
+        Mmu    = Nf'*Mmu*Nf
+    else
+        Curl = spzeros(T,0,0)
+        Mmu  = spzeros(T,0,0)
+    end
+    K = getMaxwellCurlCurlMatrix!(param,model)
+
+    #Initialize intermediate and output arrays
+    ns = size(s,2)
+    ne = size(ew,1)
+    nt = length(param.dt)
+    lam = zeros(T,ne,ns,3)
+    Jv  = zeros(T,size(P,2),ns,nt)
+
+    #Do the DC part of dCdm if source is grounded and we're inverting for sigma.
+    #Note that this code assumes (for grounded sources) that DC data
+    #Are computed as the integral of electric field over a receiver
+    #dipole and not as a potential difference
+    groundedSource = param.sourceType == :Galvanic ? true : false
+    if groundedSource && invertSigma
+        DCsolver = param.DCsolver
+        Nn,Qn, = getNodalConstraints(Mesh)
+        Gin    = getNodalGradientMatrix(Mesh)
+        G      = Qe*Gin*Nn
+        A      = getDCmatrix(Msig,G,param) # Forms matrix only if needed
+        Jvdc   = zeros(T,size(P,2),ns)
+        for j = 1:ns
+            Gzi = G'*Ne'*getdEdgeMassMatrix(Mesh,sigma,-Ne*ew[:,j,1])
+            rhs = Gzi*DsigDmz
+            lam0,DCsolver    = solveDC!(A,rhs,DCsolver)
+            lam[:,j,1]       = -G*lam0 #Taking gradient of lam0
+                                       #Prepares for data projection and
+                                       #preps lam for use as rhs in first
+                                       #time-step
+            Jvdc[:,j]        = -P'*lam[:,j,1]
+            DCsolver.doClear = 0
+        end
+        if param.storageLevel != :Factors
+            clear!(DCsolver)
+            DCsolver.doClear = 1
+        end
+    end
+
+    #Do BE and interpolation for first time-step
+    if invertMu
+        error("Inverting for mu with bdf2 time-stepping not yet supported")
+    end
+    uniqueSteps = unique(dt)
+    A           = spzeros(T,0,0)
+    A,iSolver   = getBDF2ConstDTmatrix!(dt[1],A,K,Msig,param,uniqueSteps)
+    for j = 1:ns
+        Gzi                 = 3/(2*dt[1])*Ne'*getdEdgeMassMatrix(Mesh,Ne*(ehat[:,j]-ew[:,j,1]))
+        rhs                 = Gzi*DsigDmz + 3/(2*dt[1])*Msig*lam[:,j,1]
+        lmTmp,EMsolvers[1]      = solveMaxTimeBDF2ConstDT!(A,rhs,Msig,Mesh,dt[1],EMsolvers[1])
+        EMsolvers[1].doClear    = 0
+        Gzi                 = Ne'*getdEdgeMassMatrix(Mesh,1/dt[1]*Ne*(1.5*ew[:,j,2]-0.75*ehat[:,j]-0.75*ew[:,j,1]))
+        rhs                 = Gzi*DsigDmz + 3/(4*dt[1])*Msig*lam[:,j,1] + 3/(4*dt[1])*Msig*lmTmp
+        lam[:,j,2],EMsolvers[1] = solveMaxTimeBDF2ConstDT!(A,rhs,Msig,Mesh,dt[1],EMsolvers[1])
+        Jv[:,j,1]           = -P'*lam[:,j,2]
+    end
+
+    #Do the rest of the time-steps
+    for i=2:nt
+        if dt[i] != dt[i-1]
+            A,iSolver = getBDF2ConstDTmatrix!(dt[i],A,K,Msig,param,uniqueSteps)
+            if EMsolvers[iSolver].doClear == 1
+                clear!(EMsolvers[iSolver])
+                EMsolvers[iSolver].Ainv = factorMUMPS(A,1)
+                EMsolvers[iSolver].doClear = 0
+            end
+            M = Y -> begin
+                         Y = applyMUMPS(EMsolvers[iSolver].Ainv,Y)
+                         return Y
+                     end
+            tau = dt[i]/dt[i-1]
+            g1  = (1+2*tau)/(1+tau)
+            g2  = 1 + tau
+            g3  = (tau^2)/(1+tau)
+            Atr = K + (g1/dt[i])*Msig
+            for j = 1:ns
+                Gzi = getdEdgeMassMatrix(Mesh,Ne*(g1*ew[:,j,i+1]-
+                       g2*ew[:,j,i]+g3*ew[:,j,i-1]))*DsigDmz
+                rhs = (1/dt[i])*(Ne'*Gzi +
+                      Msig*(g2*lam[:,j,2]-g3*lam[:,j,1]))
+                lam[:,j,3],cgFlag,err,iterTmp, = cg(Atr,rhs,
+                   x=vec(lam[:,j,3]),M=M,maxIter=20,tol=param.cgTol)
+                if cgFlag != 0
+                    warn("getSensMatVec: cg failed to converge at time step $i. Reached residual $err with tolerance $(param.cgTol)")
+                end
+                # compute Jv
+                Jv[:,j,i]  = -P'*(lam[:,j,3])
+                lam[:,j,1] = lam[:,j,2]
+                lam[:,j,2] = lam[:,j,3]
+            end
+        else
+            for j = 1:ns
+
+       	        Gzi = (1/dt[i])*Ne'*getdEdgeMassMatrix(Mesh,Ne*(1.5*ew[:,j,i+1]-
+       	               2*ew[:,j,i]+0.5*ew[:,j,i-1]))
+       	        rhs = Gzi*DsigDmz + 1/dt[i]*Msig*(2*lam[:,j,2]-0.5*lam[:,j,1])
+       	        lam[:,j,3],EMsolvers[iSolver] = solveMaxTimeBDF2ConstDT!(A,rhs,Msig,Mesh,dt[i],EMsolvers[iSolver])
+                # compute Jv
+                Jv[:,j,i]  = -P'*(lam[:,j,3])
+                lam[:,j,1] = lam[:,j,2]
+                lam[:,j,2] = lam[:,j,3]
+            end
+        end
+    end
+    if storageLevel != :Factors
+        for solver in EMsolvers
+          clear!(solver)
+          solver.doClear = 1
+        end
+    end
+    Jv = groundedSource ? [vec(Jvdc);vec(Jv)] : vec(Jv)
+    return param.ObsTimes*Jv
+    end
 #-------------------------------------------------------
 
 
@@ -319,6 +475,11 @@ function getSensMatVecBDF2ConstDT{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
         Curl = spzeros(T,0,0)
         Mmu  = spzeros(T,0,0)
     end
+    if param.storageLevel == :None
+        K = getMaxwellCurlCurlMatrix!(param,model)
+    else
+        K = spzeros(T,0,0)
+    end
 
     #Initialize intermediate and output arrays
     ns = size(s,2)
@@ -360,30 +521,32 @@ function getSensMatVecBDF2ConstDT{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
     if invertMu
         error("Inverting for mu with bdf2 time-stepping not yet supported")
     end
-    A = getBDF2ConstDTmatrix(Msig,Mmu,Curl,dt,param)
+    uniqueSteps = [dt]
+    A           = spzeros(T,0,0)
+    A,iSolver   = getBDF2ConstDTmatrix!(dt,A,K,Msig,param,uniqueSteps)
     for j = 1:ns
-      Gzi                 = 3/(2*dt)*Ne'*getdEdgeMassMatrix(M,Ne*(ehat[:,j]-ew[:,j,1]))
-      rhs                 = Gzi*DsigDmz + 3/(2*dt)*Msig*lam[:,j,1]
-      lmTmp,EMsolver      = solveMaxTimeBDF2ConstDT!(A,rhs,Msig,M,dt,EMsolver)
-      EMsolver.doClear    = 0
-      Gzi                 = Ne'*getdEdgeMassMatrix(M,1/dt*Ne*(1.5*ew[:,j,2]-0.75*ehat[:,j]-0.75*ew[:,j,1]))
-      rhs                 = Gzi*DsigDmz + 3/(4*dt)*Msig*lam[:,j,1] + 3/(4*dt)*Msig*lmTmp
-      lam[:,j,2],EMsolver = solveMaxTimeBDF2ConstDT!(A,rhs,Msig,M,dt,EMsolver)
-      Jv[:,j,1]           = -P'*lam[:,j,2]
+        Gzi                 = 3/(2*dt)*Ne'*getdEdgeMassMatrix(M,Ne*(ehat[:,j]-ew[:,j,1]))
+        rhs                 = Gzi*DsigDmz + 3/(2*dt)*Msig*lam[:,j,1]
+        lmTmp,EMsolver      = solveMaxTimeBDF2ConstDT!(A,rhs,Msig,M,dt,EMsolver)
+        EMsolver.doClear    = 0
+        Gzi                 = Ne'*getdEdgeMassMatrix(M,1/dt*Ne*(1.5*ew[:,j,2]-0.75*ehat[:,j]-0.75*ew[:,j,1]))
+        rhs                 = Gzi*DsigDmz + 3/(4*dt)*Msig*lam[:,j,1] + 3/(4*dt)*Msig*lmTmp
+        lam[:,j,2],EMsolver = solveMaxTimeBDF2ConstDT!(A,rhs,Msig,M,dt,EMsolver)
+        Jv[:,j,1]           = -P'*lam[:,j,2]
     end
 
     #Do the rest of the time-steps
     for i=2:nt
-      for j = 1:ns
-     	Gzi = (1/dt)*Ne'*getdEdgeMassMatrix(M,Ne*(1.5*ew[:,j,i+1]-
-     	       2*ew[:,j,i]+0.5*ew[:,j,i-1]))
-     	rhs = Gzi*DsigDmz + 1/dt*Msig*(2*lam[:,j,2]-0.5*lam[:,j,1])
-     	lam[:,j,3],EMsolver = solveMaxTimeBDF2ConstDT!(A,rhs,Msig,M,dt,EMsolver)
-        	# compute Jv
-        	Jv[:,j,i]  = -P'*(lam[:,j,3])
-        	lam[:,j,1] = lam[:,j,2]
-        	lam[:,j,2] = lam[:,j,3]
-      end
+        for j = 1:ns
+       	       Gzi = (1/dt)*Ne'*getdEdgeMassMatrix(M,Ne*(1.5*ew[:,j,i+1]-
+       	              2*ew[:,j,i]+0.5*ew[:,j,i-1]))
+       	       rhs = Gzi*DsigDmz + 1/dt*Msig*(2*lam[:,j,2]-0.5*lam[:,j,1])
+       	       lam[:,j,3],EMsolver = solveMaxTimeBDF2ConstDT!(A,rhs,Msig,M,dt,EMsolver)
+            # compute Jv
+            Jv[:,j,i]  = -P'*(lam[:,j,3])
+            lam[:,j,1] = lam[:,j,2]
+            lam[:,j,2] = lam[:,j,3]
+        end
     end
     if storageLevel != :Factors
         clear!(EMsolver)
@@ -411,22 +574,22 @@ end
 #     return A
 # end
 
-function getBDF2ConstDTmatrix{T<:Real,N}(Msig::SparseMatrixCSC{T,N},
-                                         Mmu::SparseMatrixCSC{T,N},
-                                         Curl::SparseMatrixCSC{T,N},
-                                         dt::T,param::MaxwellTimeParam)
-
-    storageLevel = param.storageLevel
-    if storageLevel == :Matrices
-        matNum = param.sourceType == :Galvanic ? 2 : 1
-        A = param.Matrices[matNum]
-    elseif storageLevel == :None
-        A = A = Curl'*Mmu*Curl + 3/(2*dt)*Msig
-    else
-        A = spzeros(T,0,0) # Empty sparse matrix placeholder argument
-    end
-    return A
-end
+# function getBDF2ConstDTmatrix{T<:Real,N}(Msig::SparseMatrixCSC{T,N},
+#                                          Mmu::SparseMatrixCSC{T,N},
+#                                          Curl::SparseMatrixCSC{T,N},
+#                                          dt::T,param::MaxwellTimeParam)
+#
+#     storageLevel = param.storageLevel
+#     if storageLevel == :Matrices
+#         matNum = param.sourceType == :Galvanic ? 2 : 1
+#         A = param.Matrices[matNum]
+#     elseif storageLevel == :None
+#         A = A = Curl'*Mmu*Curl + 3/(2*dt)*Msig
+#     else
+#         A = spzeros(T,0,0) # Empty sparse matrix placeholder argument
+#     end
+#     return A
+# end
 
 sensitivityFunctions = Dict(zip(supportedIntegrationMethods,
                                 [getSensMatVecBE;getSensMatVecBDF2;

@@ -43,7 +43,7 @@ Input:
 function getData(model::MaxwellTimeModel,param::MaxwellTimeParam,doClear::Bool=false)
 #function getData(sigma,param)
 
-    println("Worker $(myid()) reached local get data method")
+    #println("Worker $(myid()) reached local get data method")
 
     # Unpack model into conductivity and magnetic permeability
     sigma = model.sigma

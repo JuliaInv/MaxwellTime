@@ -65,15 +65,15 @@ function getFieldsBDF2{T,N}(K::SparseMatrixCSC{T,N},
                             s::AbstractArray{T},
                             param::MaxwellTimeParam)
 
-    error("BDF2 with variable step-size not implemented.\nUse timeIntegrationMethod :BDF2Const to use constant stepsize")
+
 
     # Unpack param
     storageLevel = param.storageLevel
-    EMsolver     = param.EMsolvers[1]
-    dt           = param.dt[1]
+    EMsolvers    = param.EMsolvers
+    dt           = param.dt
     nt           = length(param.dt)
     wave         = param.wave
-    M            = param.Mesh
+    Mesh         = param.Mesh
     ew           = param.fields
 
     # BDF2 with step size dt has same matrix as backward Euler with
@@ -81,28 +81,60 @@ function getFieldsBDF2{T,N}(K::SparseMatrixCSC{T,N},
     # with direct solvers here) we initialize the time-stepping by taking
     # two BE steps to get to t=4dt/3 and then we use element-wise linear
     # interpolation to compute electric field at t=dt
-    EMsolver.doClear = 1
-    A                = K + 3/(2*dt)*Msig
-    rhs              = 3/(2*dt)*( Msig*ew[:,:,1] + (wave[1]-wave[2])*s )
-    ehat,EMsolver    = solveMaxTime!(A,rhs,Msig,Msh,2/(3*dt),EMsolver)
-    EMsolver.doClear = 0
-    rhs              = 3/(2*dt)*( Msig*ehat )
-    ehat2,EMsolver   = solveMaxTime!(A,rhs,Msig,Msh,2/(3*dt),EMsolver)
-    ew[:,:,2]        = 0.5*(ehat+ehat2)
-    param.AuxFields  = ehat
+    for solver in EMsolvers
+      solver.doClear = 1
+    end
+    uniqueSteps          = Vector{T}()
+    A                    = spzeros(T,0,0)
+    A,iSolver            = getBDF2ConstDTmatrix!(dt[1],A,K,Msig,param,uniqueSteps)
+    rhs                  = 3/(2*dt[1])*( Msig*ew[:,:,1] + (wave[1]-wave[2])*s )
+    ehat,EMsolvers[1]    = solveMaxTimeBDF2ConstDT!(A,rhs,Msig,Mesh,2/(3*dt[1]),EMsolvers[1])
+    EMsolvers[1].doClear = 0
+    rhs                  = 3/(2*dt[1])*( Msig*ehat )
+    ehat2,EMsolvers[1]   = solveMaxTimeBDF2ConstDT!(A,rhs,Msig,Mesh,2/(3*dt[1]),EMsolvers[1])
+    ew[:,:,2]            = 0.5*(ehat+ehat2)
+    param.AuxFields      = ehat
 
-    #Continue time-stepping using BDF2 with constant step-size
+
+
+    # Do the time-stepping
     for i=2:nt
-      rhs = -3/(2*dt)*( (wave[i+1]-(4/3)*wave[i]+wave[i-1]/3)*s +
-                        Msig*(-4/3*ew[:,:,i] + ew[:,:,i-1]/3) )
-      ew[:,:,i+1],EMsolver = solveMaxTime!(A,rhs,Msig,M,dt,EMsolver)
+        if dt[i] != dt[i-1]
+            A,iSolver = getBDF2ConstDTmatrix!(dt[i],A,K,Msig,param,uniqueSteps)
+            if EMsolvers[iSolver].doClear == 1
+                clear!(EMsolvers[iSolver])
+                EMsolvers[iSolver].Ainv = factorMUMPS(A,1)
+                EMsolvers[iSolver].doClear = 0
+            end
+            tau = dt[i]/dt[i-1]
+            g1  = (1+2*tau)/(1+tau)
+            g2  = 1 + tau
+            g3  = (tau^2)/(1+tau)
+            Atr = K + (g1/dt[i])*Msig
+            rhs = ( (-g1*wave[i+1]+g2*wave[i]-g3*wave[i-1])*s +
+                             Msig*(g2*ew[:,:,i] - g3*ew[:,:,i-1]) )/dt[i]
+            M = Y -> begin
+                         Y = applyMUMPS(EMsolvers[iSolver].Ainv,Y)
+                         return Y
+                     end
+            for j = 1:size(rhs,2)
+                ew[:,j,i+1],cgFlag,err,iterTmp, = cg(Atr,vec(rhs[:,j]),
+                    x=vec(ew[:,j,i+1]),M=M,maxIter=20,tol=param.cgTol)
+                #println("cg converged to tolerance $(param.cgTol) after $(iterTmp) iterations")
+                if cgFlag != 0
+                    warn("getData: cg failed to converge at time step $i. Reached residual $err with tolerance $(param.cgTol)")
+                end
+            end
+        else
+            rhs = -3/(2*dt[i])*( (wave[i+1]-(4/3)*wave[i]+wave[i-1]/3)*s +
+                             Msig*(-4/3*ew[:,:,i] + ew[:,:,i-1]/3) )
+            ew[:,:,i+1],EMsolvers[iSolver] = solveMaxTimeBDF2ConstDT!(A,rhs,Msig,Mesh,dt[i],EMsolvers[iSolver])
+        end
     end
     if storageLevel != :Factors
-      clear!(EMsolver)
-      EMsolver.doClear = 1
-    end
-    if storageLevel == :Matrices
-        push!(param.Matrices,A)
+        for solver in EMsolvers
+          solver.doClear = 1
+        end
     end
     return param
 end
@@ -145,7 +177,7 @@ function getFieldsBDF2ConstDT{T,N}(K::SparseMatrixCSC{T,N},
                         Msig*(-4/3*ew[:,:,i] + ew[:,:,i-1]/3) )
       ew[:,:,i+1],EMsolver = solveMaxTimeBDF2ConstDT!(A,rhs,Msig,M,dt,EMsolver)
     end
-    if ~(storageLevel == :Factors)
+    if storageLevel != :Factors
       clear!(EMsolver)
       EMsolver.doClear = 1
     end
@@ -324,9 +356,45 @@ function getBEMatrix!{T,N}(dt::T,A::SparseMatrixCSC{T,N},
         elseif storageLevel == :Matrices
             iSolver = 1
             A       = param.Matrices[iv[1]]
+            param.EMsolvers[1].doClear = 1
         else
             iSolver = 1
             A       = K + (1/dt)*Msig
+            param.EMsolvers[1].doClear = 1
+        end
+    end
+    return A,iSolver
+end
+
+function getBDF2ConstDTmatrix!{T,N}(dt::T,A::SparseMatrixCSC{T,N},
+                           K::SparseMatrixCSC{T,N},Msig::SparseMatrixCSC{T,N},
+                           param::MaxwellTimeParam,uniqueSteps::Vector{T})
+
+    storageLevel = param.storageLevel
+    if ~in(dt,uniqueSteps)
+        push!(uniqueSteps,dt)
+        A = K + 3/(2*dt)*Msig
+        if storageLevel == :Matrices
+            push!(param.Matrices,A)
+        end
+        if storageLevel == :Factors
+            iSolver = length(uniqueSteps)
+        else
+            iSolver  = 1
+            param.EMsolvers[1].doClear = 1
+        end
+    else
+        iv = indexin([dt],uniqueSteps)
+        if storageLevel == :Factors
+            iSolver = iv[1]
+        elseif storageLevel == :Matrices
+            iSolver = 1
+            A       = param.Matrices[iv[1]]
+            param.EMsolvers[1].doClear = 1
+        else
+            iSolver = 1
+            A       = K + 3/(2*dt)*Msig
+            param.EMsolvers[1].doClear = 1
         end
     end
     return A,iSolver
