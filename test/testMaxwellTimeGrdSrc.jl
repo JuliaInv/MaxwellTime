@@ -1,4 +1,4 @@
-#Test sensitivities for backward Euler forward code with OcTree Mesh and 
+#Test sensitivities for backward Euler forward code with OcTree Mesh and
 #grounded source. Single source and multiple source configurations tested.
 
 using MaxwellTime
@@ -31,12 +31,12 @@ nn   = size(Xn,1)
 #Match those computed from explicitly constructing J.
 Sources = zeros(ne)
 Tx = [1792.0 2048.0 1024.0;
-      2048.0 2048.0 1024.0;]   
+      2048.0 2048.0 1024.0;]
 
 Sources = getEdgeIntegralOfPolygonalChain(Msh,Tx)
 
 #Setup receivers
-Iobs = round(Integer,ceil(Msh.ne[1]*rand(16)))
+Iobs = round.(Integer,ceil.(Msh.ne[1]*rand(16)))
 P    = speye(ne)
 P    = P[Iobs,:]
 
@@ -95,7 +95,7 @@ dCdu  = [G'*Msig*G blnkn;
          blnken -1/dt[2]*Msig K+1/dt[2]*Msig blnkee blnkee;
          blnken blnkee -1/dt[3]*Msig K+1/dt[3]*Msig blnkee;
          blnken blnkee blnkee -1/dt[4]*Msig K+1/dt[4]*Msig;]
-         
+
 
 Pj     = blkdiag(-P*Ne*G,P*Ne,P*Ne,P*Ne,P*Ne)
 z      = rand(Msh.nc)
@@ -131,7 +131,7 @@ Tx[:,:,1] = [1792.0 2048.0 1024.0;
              2048.0 2048.0 1024.0;]
 Tx[:,:,2] = [2048.0 2048.0 1024.0;
              2304.0 2048.0 1024.0;]
-       
+
 for i=1:ns
   Sources[:,i] = getEdgeIntegralOfPolygonalChain(Msh,Tx[:,:,i])
 end
@@ -155,7 +155,7 @@ function f(sigdum)
   d, = getData(sigdum,pFor)
   return d
 end
-  
+
 df(zdum,sigdum) = getSensMatVec(zdum,sigdum,pFor)
 pass,Error,Order = checkDerivativeMax(f,df,sigma;nSuccess=4)
 @test pass
@@ -197,7 +197,7 @@ function f2(sigdum)
   d, = getData(sigdum,pFor)
   return d
 end
-  
+
 df2(zdum,sigdum) = getSensMatVec(zdum,sigdum,pFor)
 
 println(" ")
@@ -240,7 +240,7 @@ println(" ")
 println("==========  Test simultaneous sigma and mu inversion ======================")
 println(" ")
 
-m    = MaxwellTimeModel(log(sigma),chi,true,true)
+m    = MaxwellTimeModel(log.(sigma),chi,true,true)
 m0   = MaxwellTimeModel(zeros(length(sigma)),zeros(length(chi)),false,false)
 pFor = getMaxwellTimeParam(Msh,Sources,P',obsTimes,dt,wave,sourceType)
 
@@ -248,7 +248,7 @@ function f3(sigdum)
   d, = getData(sigdum,pFor)
   return d
 end
-  
+
 df3(zdum,sigdum) = getSensMatVec(zdum,sigdum,pFor)
 
 println(" ")

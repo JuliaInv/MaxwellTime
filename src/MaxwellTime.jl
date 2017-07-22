@@ -1,12 +1,13 @@
 module MaxwellTime
-	
+
 using jInv.Mesh.AbstractMesh
 using JOcTree
 using jInv.Utils
 using jInv.LinearSolvers
 using KrylovMethods
-		
-# We will add MaxwellTime specific subtypes/methods 
+using MUMPS
+
+# We will add MaxwellTime specific subtypes/methods
 # to the following jInv generics
 import jInv.ForwardShare.ForwardProbType
 import jInv.ForwardShare.getData
@@ -19,14 +20,14 @@ import jInv.InverseSolve.AbstractModel
 
 # Import MatrixOrScaling typealias
 import jInv.ForwardShare.MatrixOrScaling
-		
+
 # Define MaxwellTime forward problem param type and associated setup functions
 include("MaxwellTimeParam.jl")
 
 # Define MaxwellTimeModel earth model type and associated methods
 include("MaxwellTimeModel.jl")
 
-# Define time-stepping (integration) functions and map 
+# Define time-stepping (integration) functions and map
 # integration method symbols to the appropriate
 # functions defined in getFields.jl
 # getFields.jl also contains matrix construction helper
@@ -42,7 +43,7 @@ integrationFunctions = Dict(zip(supportedIntegrationMethods,
 include("getData.jl")
 include("getSensMatVec.jl")
 include("getSensTMatVec.jl")
-include("interpLocalToGlobal.jl") # Specific methods for MaxwellTimeModel 
+include("interpLocalToGlobal.jl") # Specific methods for MaxwellTimeModel
                                   # mesh 2 mesh interpolation
 
 # Interface MaxwellTime to jInv.LinearSolvers to solve linear systems
