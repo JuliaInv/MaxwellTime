@@ -80,7 +80,7 @@ MaxwellTimeParam{S,T,U}(Mesh::AbstractMesh,Sources::AbstractArray{S},Obs::Abstra
 # docstring below for documentation.
 supportedIntegrationMethods = [:BE; :BDF2; :BDF2Const; :TRBDF2]
 supportedSourceTypes        = [:InductiveDiscreteWire;
-                               :InductiveAnalyticLoop; :Galvanic]
+                               :InductiveLoopPotential; :Galvanic]
 supportedStorageLevels      = [:Factors; :Matrices; :None]
 supportedSensitivityMethods = [:Implicit; :Explicit]
 
@@ -105,7 +105,7 @@ Input:  Mandatory arguments:
         wave - vector of length 1+length(dt) giving the magnitude of the
                current at each time in [0;cumsum(dt)]
         sourceType::Symbol - Options are :Galvanic, :InductiveDiscreteWire,
-                             and :InductiveAnalyticLoop.
+                             and :InductiveLoopPotential.
                              Inductive sources assume zero electric field
                              at t=0 (initial time). Solve DC problem to
                              compute initial electric fields. DC electric
