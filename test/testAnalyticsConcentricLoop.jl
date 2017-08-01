@@ -37,7 +37,7 @@ Tx = [  h/2-l/2  h/2-l/2 0.0;
 
 MeS = getEdgeIntegralOfPolygonalChain(M,Tx)
 a = sqrt((l^2)/pi)
-Aloop = staticCurrentLoopVectorPotential(M,a,[h;h;0.0])
+Aloop = staticCurrentLoopVectorPotential(M,a,[h/2;h/2;0.0])
 Ne,Qe, = getEdgeConstraints(M)
 Nf,Qf, = getFaceConstraints(M)
 C      = getCurlMatrix(M)
@@ -61,9 +61,9 @@ obsTimes = cumsum(dt[1:end-1])
 
 sourceType = :InductiveDiscreteWire
 pForDisc   = getMaxwellTimeParam(M,MeS,P,obsTimes,dt,wave,sourceType;
-                                 timeIntegrationMethod=:BDF2Const)
+                                 timeIntegrationMethod=:BE)
 
-sourceType = :InductiveAnalyticLoop
+sourceType = :InductiveDiscreteWire
 pForAnal   = getMaxwellTimeParam(M,Aloop,P,obsTimes,dt,wave,sourceType;
                                  timeIntegrationMethod=:BDF2Const)
 
@@ -133,7 +133,7 @@ p3 = find(dbzdt .> 0)
 m3 = find(dbzdt .< 0)
 
 figure()
-loglog(obsTimes[p1],d1[p1],"b-")
+loglog(obsTimes[p1],d1[p1],"b-o")
 loglog(obsTimes[m1],abs.(d1[m1]),"b--")
 loglog(obsTimes[p2],d2[p2],"r-")
 loglog(obsTimes[m2],abs.(d2[m2]),"r--")

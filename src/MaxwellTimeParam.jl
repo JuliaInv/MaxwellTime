@@ -9,6 +9,7 @@ type MaxwellTimeParam{S<:Real,T<:AbstractSolver,U<:AbstractSolver} <: ForwardPro
     Sources::AbstractArray{S}
     Obs::AbstractArray{S}
     ObsTimes::AbstractArray{S}
+    t0::S
     dt::Vector{S}
     wave::Vector{S}
     sourceType::Symbol
@@ -32,22 +33,22 @@ type MaxwellTimeParam{S<:Real,T<:AbstractSolver,U<:AbstractSolver} <: ForwardPro
     # Matrices, fields, explicit sensitivity matrix, and possibly K
     # left uninitialized
     MaxwellTimeParam{S,T,U}(Mesh::AbstractMesh,Sources::AbstractArray{S},Obs::AbstractArray{S},
-                     ObsTimes::AbstractArray{S},dt::Vector{S},wave::Vector{S},sourceType::Symbol,
+                     ObsTimes::AbstractArray{S},t0::S,dt::Vector{S},wave::Vector{S},sourceType::Symbol,
                      storageLevel::Symbol,sensitivityMethod::Symbol,
                      timeIntegrationMethod::Symbol,EMsolvers::Vector{T},
                      DCsolver::U) where {S<:Real,T<:AbstractSolver,U<:AbstractSolver} = new(
-                                        Mesh,Sources,Obs,ObsTimes,dt,wave,sourceType,
+                                        Mesh,Sources,Obs,ObsTimes,t0,dt,wave,sourceType,
                                         storageLevel,sensitivityMethod,
                                         timeIntegrationMethod,
                                         EMsolvers,DCsolver)
 
     MaxwellTimeParam{S,T,U}(Mesh::AbstractMesh,Sources::AbstractArray{S},Obs::AbstractArray{S},
-                     ObsTimes::AbstractArray{S},dt::Vector{S},wave::Vector{S},sourceType::Symbol,
+                     ObsTimes::AbstractArray{S},t0::S,dt::Vector{S},wave::Vector{S},sourceType::Symbol,
                      storageLevel::Symbol,sensitivityMethod::Symbol,
                      timeIntegrationMethod::Symbol,EMsolvers::Vector{T},
                      DCsolver::U,K::SparseMatrixCSC) where
                      {S<:Real,T<:AbstractSolver,U<:AbstractSolver} = new(
-                                     Mesh,Sources,Obs,ObsTimes,dt,wave,
+                                     Mesh,Sources,Obs,ObsTimes,t0,dt,wave,
                                      sourceType,storageLevel,sensitivityMethod,
                                      timeIntegrationMethod,
                                      EMsolvers,DCsolver,K)
@@ -55,22 +56,23 @@ end
 
 # Unfortunately parametric types need these matching outer and inner constructors
 MaxwellTimeParam{S,T,U}(Mesh::AbstractMesh,Sources::AbstractArray{S},Obs::AbstractArray{S},
-	                 ObsTimes::AbstractArray{S},dt::Vector{S},wave::Vector{S},sourceType::Symbol,
+	                 ObsTimes::AbstractArray{S},t0::S,dt::Vector{S},wave::Vector{S},sourceType::Symbol,
 	                 storageLevel::Symbol,sensitivityMethod::Symbol,
 	                 timeIntegrationMethod::Symbol,EMsolvers::Vector{T},
 	                 DCsolver::U) = MaxwellTimeParam{S,T,U}(
-	                                                 Mesh,Sources,Obs,ObsTimes,dt,wave,
+	                                                 Mesh,Sources,Obs,ObsTimes,
+                                                     t0,dt,wave,
 	                                                 sourceType,storageLevel,
 	                                                 sensitivityMethod,
                                                      timeIntegrationMethod,
                                                      EMsolvers,DCsolver)
 
 MaxwellTimeParam{S,T,U}(Mesh::AbstractMesh,Sources::AbstractArray{S},Obs::AbstractArray{S},
-	                 ObsTimes::AbstractArray{S},dt::Vector{S},wave::Vector{S},sourceType::Symbol,
+	                 ObsTimes::AbstractArray{S},t0::S,dt::Vector{S},wave::Vector{S},sourceType::Symbol,
 	                 storageLevel::Symbol,sensitivityMethod::Symbol,
 	                 timeIntegrationMethod::Symbol,EMsolvers::Vector{T},
 	                 DCsolver::U,K::SparseMatrixCSC) = MaxwellTimeParam{S,T,U}(
-	                                                 Mesh,Sources,Obs,ObsTimes,dt,wave,
+	                                                 Mesh,Sources,Obs,ObsTimes,t0,dt,wave,
 	                                                 sourceType,storageLevel,
 	                                                 sensitivityMethod,
                                                      timeIntegrationMethod,
@@ -100,6 +102,7 @@ Input:  Mandatory arguments:
         ObsTimes - Vector of observation times. Data is first computed at
                    times with efields then linearly interpolated to observation
                    times.
+        t0  - Real number. Initial time. Needed to link ObsTimes and dt.
         dt  - vector holding size of each time-step. For direct solvers,
               the number of factorizations = length(unique(dt))
         wave - vector of length 1+length(dt) giving the magnitude of the
@@ -156,6 +159,7 @@ function getMaxwellTimeParam{S<:Real}(Mesh::AbstractMesh,
                                                  Sources::AbstractArray{S},
                                                  Obs::AbstractArray{S},
                                                  ObsTimes::Vector{S},
+                                                 t0::S,
                                                  dt::Vector{S},
                                                  wave::Vector{S},
                                                  sourceType::Symbol;
@@ -215,7 +219,7 @@ function getMaxwellTimeParam{S<:Real}(Mesh::AbstractMesh,
 
     # ObsTimeMat interpolates observations from step times
     # to observation times
-    ObsTimeMat = getObsTimeMatrix(ObsTimes,dt,size(Obs,2),size(s,2),sourceType)
+    ObsTimeMat = getObsTimeMatrix(ObsTimes,t0,dt,size(Obs,2),size(s,2),sourceType)
 
     if sourceType == :InductiveAnalyticLoop
         K = getMaxwellCurlCurlMatrix(Mesh,fill(pi*4e-7,Mesh.nc))
@@ -225,15 +229,15 @@ function getMaxwellTimeParam{S<:Real}(Mesh::AbstractMesh,
                                 EMsolvers,DCsolver,K)
     else
         K = spzeros(0,0)
-        return MaxwellTimeParam(Mesh,s,Obs,ObsTimeMat,dt,wave,sourceType,storageLevel,
+        return MaxwellTimeParam(Mesh,s,Obs,ObsTimeMat,t0,dt,wave,sourceType,storageLevel,
                                 sensitivityMethod,timeIntegrationMethod,
                                 EMsolvers,DCsolver,K)
     end
 end
 
-function getObsTimeMatrix{S<:Real}(ObsTimes::Vector{S},dt::Vector{S},
+function getObsTimeMatrix{S<:Real}(ObsTimes::Vector{S},t0::S,dt::Vector{S},
                                    nr::Integer,ns::Integer,sourceType::Symbol)
-    t = sourceType == :Galvanic ? [0;cumsum(dt)] : cumsum(dt)
+    t = sourceType == :Galvanic ? t0 + [0;cumsum(dt)] : t0 + cumsum(dt)
     #obsIdx = [searchsortedfirst(t,ti) for ti in ObsTimes]
     nt = length(ObsTimes)
     interpWeights = zeros(S,nt)

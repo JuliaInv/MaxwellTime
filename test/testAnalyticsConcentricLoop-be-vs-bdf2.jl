@@ -53,8 +53,8 @@ Rx[:,1] .-= 6
 Rx[:,2] .+= 10
 P = getEdgeIntegralOfPolygonalChain(M,Rx,normalize=true)
 
-#dt    = (1e-5)*ones(100)
-dt    = [(5e-6)*ones(25);(1e-5)*ones(25);(2.25e-5)*ones(25)]
+dt    = (5e-6)*ones(200)
+#dt    = [(5e-6)*ones(25);(1e-5)*ones(25);(2.25e-5)*ones(25)]
 t     = cumsum(dt)
 wave  = zeros(length(dt)+1)
 wave[1] = 1.0
@@ -117,13 +117,13 @@ m2 = find(bzLoop .< 0)
 p3 = find(bzAnal .> 0)
 m3 = find(bzAnal .< 0)
 
-figure()
-loglog(obsTimes[p1],bzDisc[p1],"b-")
-loglog(obsTimes[m1],abs.(bzDisc[m1]),"b--")
-loglog(obsTimes[p2],bzLoop[p2],"r-")
-loglog(obsTimes[m2],abs.(bzLoop[m2]),"r--")
-loglog(obsTimes[p3],bzAnal[p3],"m-")
-loglog(obsTimes[m3],abs.(bzAnal[m3]),"m--")
+# figure()
+# loglog(obsTimes[p1],bzDisc[p1],"b-")
+# loglog(obsTimes[m1],abs.(bzDisc[m1]),"b--")
+# loglog(obsTimes[p2],bzLoop[p2],"r-")
+# loglog(obsTimes[m2],abs.(bzLoop[m2]),"r--")
+# loglog(obsTimes[p3],bzAnal[p3],"m-")
+# loglog(obsTimes[m3],abs.(bzAnal[m3]),"m--")
 
 # plot dbdt
 p1 = find(d1 .> 0)
@@ -134,9 +134,9 @@ p3 = find(dbzdt .> 0)
 m3 = find(dbzdt .< 0)
 
 figure()
-loglog(obsTimes[p1],d1[p1],"b-")
+loglog(obsTimes[p1],d1[p1],"bo-")
 loglog(obsTimes[m1],abs.(d1[m1]),"b--")
-loglog(obsTimes[p2],d2[p2],"r-")
+loglog(obsTimes[p2],d2[p2],"ro-")
 loglog(obsTimes[m2],abs.(d2[m2]),"r--")
 loglog(obsTimes[p3],dbzdt[p3],"m-")
 loglog(obsTimes[m3],abs.(dbzdt[m3]),"m--")

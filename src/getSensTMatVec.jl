@@ -287,18 +287,18 @@ function getSensTMatVecBDF2{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
         g3p  = (tau3^2)/(1+tau3)
         if (dt[i] != dt[i+1]) || (i==nt)
             A,iSolver = getBDF2ConstDTmatrix!(dt[i],A,K,Msig,param,uniqueSteps)
-            if (i>1) && (dt[i] != dt[i-1])
-                Atr  = K + (g1/dt[i])*Msig
-                if EMsolvers[iSolver].doClear == 1
-                    clear!(EMsolvers[iSolver])
-                    EMsolvers[iSolver].Ainv = factorMUMPS(A,1)
-                    EMsolvers[iSolver].doClear = 0
-                end
-                M = Y -> begin
-                             Y = applyMUMPS(EMsolvers[iSolver].Ainv,Y)
-                             return Y
-                         end
+        end
+        if (i>1) && (dt[i] != dt[i-1])
+            Atr  = K + (g1/dt[i])*Msig
+            if EMsolvers[iSolver].doClear == 1
+                clear!(EMsolvers[iSolver])
+                EMsolvers[iSolver].Ainv = factorMUMPS(A,1)
+                EMsolvers[iSolver].doClear = 0
             end
+            M = Y -> begin
+                         Y = applyMUMPS(EMsolvers[iSolver].Ainv,Y)
+                         return Y
+                     end
         end
         for j = 1:ns
             rhs  = pz[:,j,i] + Msig*(g2p*lam[:,j,2]/dt[i+1]-g3p*lam[:,j,3]/dt[i+2])
