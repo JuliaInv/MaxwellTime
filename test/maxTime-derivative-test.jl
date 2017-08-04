@@ -33,7 +33,7 @@ function checkDerivativeMax(f::Function,x0;out::Bool=true,tol::Float64=1.9,nSucc
 	if out
 		println(@sprintf("%9s\t%9s\t%9s\t%9s\t%9s\t%5s","h","E0","E1","O1","O2","OK?"))
 	end
-	
+
 	f0,dvf  = f(x0,v)
 	f0      = vec(f0)
 	nf0     = norm(f0)
@@ -47,10 +47,10 @@ function checkDerivativeMax(f::Function,x0;out::Bool=true,tol::Float64=1.9,nSucc
 		Error[j,1] = norm(f0-ft)/nf0          # Error TaylorPoly 0
 		Error[j,2] = norm(f0 .+10.0^(-j)*dvf .- ft)/nf0 # Error TaylorPoly 1
 		if j>1
-			Order[j,:] = log10(Error[j-1,:]./Error[j,:]);
+			Order[j,:] = log10.(Error[j-1,:]./Error[j,:]);
 		end
 		if (Order[j,2]>tol) || (Error[j,1]/Error[j,2] > 100); Success[j]=1; end
-		if out 
+		if out
 			println(@sprintf("%1.3e\t%1.3e\t%1.3e\t%1.3e\t%1.3e\t%5d",
 							10.0^(-j), Error[j,1],Error[j,2], Order[j,1],Order[j,2],Success[j]))
 		end
@@ -82,7 +82,7 @@ function checkDerivativeMaxMu(f::Function,x0::MaxwellTimeModel,pFor;out::Bool=tr
     		Order[j,:] = log10(Error[j-1,:]./Error[j,:]);
     	end
     	if (Order[j,2]>tol) || (Error[j,1]/Error[j,2] > 100); Success[j]=1; end
-    	if out 
+    	if out
     		println(@sprintf("%1.3e\t%1.3e\t%1.3e\t%1.3e\t%1.3e\t%5d",
     						10.0^(-j), Error[j,1],Error[j,2], Order[j,1],Order[j,2],Success[j]))
     	end
@@ -122,9 +122,9 @@ function checkDerivativeMax(f::Function,x0in::MaxwellTimeModel,x0bg;out::Bool=tr
 	    v  = [v1;v2]
 	    modfun = x-> begin
 	                     n = length(x0in.sigma)
-                             m = MaxwellTimeModel(exp(x[1:n]),mu0*(1+x[n+1:end]),true,true)
+                             m = MaxwellTimeModel(exp.(x[1:n]),mu0*(1+x[n+1:end]),true,true)
                              Dsig = Vector();
-                             push!(Dsig,[spdiagm(exp(x[1:n])) spzeros(n,n)])
+                             push!(Dsig,[spdiagm(exp.(x[1:n])) spzeros(n,n)])
                              push!(Dsig,[spzeros(n,n) spdiagm(fill(pi*4e-7,n))])
                              return m,Dsig
                          end
@@ -150,10 +150,10 @@ function checkDerivativeMax(f::Function,x0in::MaxwellTimeModel,x0bg;out::Bool=tr
 		Error[j,1] = norm(f0-ft)/nf0          # Error TaylorPoly 0
 		Error[j,2] = norm(f0 .+10.0^(-j)*dvf .- ft)/nf0 # Error TaylorPoly 1
 		if j>1
-			Order[j,:] = log10(Error[j-1,:]./Error[j,:]);
+			Order[j,:] = log10.(Error[j-1,:]./Error[j,:]);
 		end
 		if (Order[j,2]>tol) || (Error[j,1]/Error[j,2] > 100); Success[j]=1; end
-		if out 
+		if out
 			println(@sprintf("%1.3e\t%1.3e\t%1.3e\t%1.3e\t%1.3e\t%5d",
 							10.0^(-j), Error[j,1],Error[j,2], Order[j,1],Order[j,2],Success[j]))
 		end
@@ -161,4 +161,3 @@ function checkDerivativeMax(f::Function,x0in::MaxwellTimeModel,x0bg;out::Bool=tr
 	pass = sum(Success) > nSuccess
 	return  pass,Error,Order
 end
- 
