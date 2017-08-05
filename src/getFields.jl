@@ -103,7 +103,7 @@ function getFieldsBDF2{T,N}(K::SparseMatrixCSC{T,N},
             A,iSolver = getBDF2ConstDTmatrix!(dt[i],A,K,Msig,param,uniqueSteps)
             if EMsolvers[iSolver].doClear == 1
                 clear!(EMsolvers[iSolver])
-                EMsolvers[iSolver].Ainv = factorMUMPS(A,1)
+                EMsolvers[iSolver].Ainv = hasMUMPS ? factorMUMPS(A,1) : cholfact(A)
                 EMsolvers[iSolver].doClear = 0
             end
             tau = dt[i]/dt[i-1]
@@ -114,7 +114,7 @@ function getFieldsBDF2{T,N}(K::SparseMatrixCSC{T,N},
             rhs = ( (-g1*wave[i+1]+g2*wave[i]-g3*wave[i-1])*s +
                              Msig*(g2*ew[:,:,i] - g3*ew[:,:,i-1]) )/dt[i]
             M = Y -> begin
-                         Y = applyMUMPS(EMsolvers[iSolver].Ainv,Y)
+                         Y = hasMUMPS ? applyMUMPS(EMsolvers[iSolver].Ainv,Y) : EMsolvers[iSolver].Ainv\Y 
                          return Y
                      end
             for j = 1:size(rhs,2)

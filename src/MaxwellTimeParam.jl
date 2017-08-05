@@ -86,6 +86,10 @@ supportedSourceTypes        = [:InductiveDiscreteWire;
 supportedStorageLevels      = [:Factors; :Matrices; :None]
 supportedSensitivityMethods = [:Implicit; :Explicit]
 
+# Conditionally set default solver, depending on whether or not user
+# has MUMPS installed
+defaultSolver = hasMUMPS ? :MUMPS : :juliaSolver
+
 """
 function param = getMaxwellTimeParam(Mesh,Sources,Obs,ObsTimes,dt,
                                      wave,sourceType;kwargs)
@@ -166,8 +170,8 @@ function getMaxwellTimeParam{S<:Real}(Mesh::AbstractMesh,
 			                         storageLevel::Symbol=:Factors,
 			                         sensitivityMethod::Symbol=:Implicit,
 			                         timeIntegrationMethod::Symbol=:BE,
-			                         EMsolverType::Symbol=:MUMPS,
-			                         DCsolverType::Symbol=:MUMPS)
+			                         EMsolverType::Symbol=defaultSolver,
+			                         DCsolverType::Symbol=defaultSolver)
 
     # Check that user has chosen valid settings for categorical options
     in(timeIntegrationMethod,supportedIntegrationMethods) || error("Unsupported integration method")

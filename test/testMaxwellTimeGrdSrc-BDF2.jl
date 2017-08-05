@@ -9,7 +9,6 @@ using JOcTree
 using Base.Test
 using jInv.LinearSolvers
 using jInv.Utils
-using MUMPS
 include("getC.jl")
 # println("Testing single source")
 
@@ -47,6 +46,7 @@ nt      = 4
 dtvec   = 1e-4*ones(nt)
 dt      = dtvec[1]
 t       = [0.0;cumsum(dtvec)]
+t0      = t[1]
 wave    = zeros(nt+1)
 wave[1] = 1.0
 #
@@ -59,7 +59,7 @@ sigma = a.^b
 sourceType            = :Galvanic
 timeIntegrationMethod = :BDF2Const
 obsTimes              = t
-pFor                  = getMaxwellTimeParam(Msh,Sources,P',obsTimes,dtvec,wave,sourceType,
+pFor                  = getMaxwellTimeParam(Msh,Sources,P',obsTimes,t0,dtvec,wave,sourceType,
                                             timeIntegrationMethod=timeIntegrationMethod)
 println("Getting data")
 d,pFor = getData(sigma,pFor)
@@ -120,7 +120,7 @@ dCdu  = [G'*Msig*G blnkn;
 #
 Pj     = blkdiag(-P*Ne*G,[spzeros(size(P,1),nen) P*Ne],P*Ne,P*Ne,P*Ne)
 z      = rand(Msh.nc)
-JzMat  = -Pj*solveMUMPS(dCdu,dCdm*z)
+JzMat  = -Pj*(dCdu\(dCdm*z))
 println("Getting MaxwellTime sens mat vec product")
 JzStep = getSensMatVec(z,sigma,pFor)
 errInf = norm(JzMat-JzStep,Inf)/norm(JzMat,Inf)
@@ -130,7 +130,7 @@ println("Rel. Inf and L2 norm errors in Jz are $errInf and $errSL2")
 
 #Transpose
 x       = rand(5*size(P,1))
-tmp     = -solveMUMPS(dCdu',Pj'*x)
+tmp     = -dCdu'\(Pj'*x)
 JtxMat  = dCdm'*tmp
 println("Getting MaxwellTime sens transpose mat vec product")
 JtxStep,JtxDebug,rhs = getSensTMatVec(x,sigma,pFor)
@@ -160,7 +160,7 @@ for i=1:ns
 end
 
 #Get data at initial model
-pFor   = pFor   = getMaxwellTimeParam(Msh,Sources,P',obsTimes,dtvec,wave,sourceType,
+pFor   = pFor   = getMaxwellTimeParam(Msh,Sources,P',obsTimes,t0,dtvec,wave,sourceType,
                                  timeIntegrationMethod=timeIntegrationMethod)
 println("Getting data")
 D,pFor = getData(sigma,pFor)

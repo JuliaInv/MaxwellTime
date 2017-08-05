@@ -2,7 +2,6 @@ using MaxwellTime
 using JOcTree
 using Base.Test
 using jInv.Utils
-using MUMPS
 using jInv.LinearSolvers
 
 @testset "Ind src BE time-stepping" begin
@@ -60,7 +59,8 @@ sigma   = zeros(M.nc)+1e-2
 sigma[Xc[:,3] .> 1024] = 1e-8
 
 sourceType = :InductiveDiscreteWire
-pFor = getMaxwellTimeParam(M,Sources,P,obsTimes,dt,wave,sourceType)
+t0 = 0.0
+pFor = getMaxwellTimeParam(M,Sources,P,obsTimes,t0,dt,wave,sourceType)
 
 tic()
 D,pFor = getData(sigma,pFor);
@@ -85,7 +85,7 @@ pass,Error,Order = checkDerivativeMax(f,df,sigma;nSuccess=5,v=z)
 println("==========  Derivative Test -- explicit sensitivities ======================")
 println(" ")
 
-pForSE = getMaxwellTimeParam(M,Sources,P,obsTimes,dt,wave,sourceType,
+pForSE = getMaxwellTimeParam(M,Sources,P,obsTimes,t0,dt,wave,sourceType,
                              sensitivityMethod=:Explicit)
 
 function f(sigdum)

@@ -5,7 +5,13 @@ using JOcTree
 using jInv.Utils
 using jInv.LinearSolvers
 using KrylovMethods
-using MUMPS
+
+hasMUMPS = false
+try
+    using MUMPS
+    hasMUMPS = true
+catch
+end
 
 # We will add MaxwellTime specific subtypes/methods
 # to the following jInv generics

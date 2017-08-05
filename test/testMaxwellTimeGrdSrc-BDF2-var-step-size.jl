@@ -9,7 +9,6 @@ using JOcTree
 using Base.Test
 using jInv.LinearSolvers
 using jInv.Utils
-using MUMPS
 include("getC.jl")
 # println("Testing single source")
 
@@ -49,6 +48,7 @@ nt      = 4
 dt      = dt0*cumprod([1.0;1.25*ones(nt-1)])
 #dt       = dt0*[1.0;1.0;1.0;1.25^2]
 t       = [0;cumsum(dt)]
+t0      = t[1]
 wave    = zeros(nt+1)
 wave[1] = 1.0
 #
@@ -61,7 +61,7 @@ sigma = a.^b
 sourceType            = :Galvanic
 timeIntegrationMethod = :BDF2
 obsTimes              = t
-pFor                  = getMaxwellTimeParam(Msh,Sources,P',obsTimes,dt,wave,sourceType,
+pFor                  = getMaxwellTimeParam(Msh,Sources,P',obsTimes,t0,dt,wave,sourceType,
                                             timeIntegrationMethod=timeIntegrationMethod)
 pFor.cgTol = 1e-15
 println("Getting data")
@@ -119,7 +119,7 @@ dCdm   = [G'*Ne'*getdEdgeMassMatrix(Msh,-Ne*ew[:,1,1]);
           Ne'*getdEdgeMassMatrix(Msh,1/dt[3]*Ne*(g13*ew[:,1,4]-g23*ew[:,1,3]+g33*ew[:,1,2]));
           Ne'*getdEdgeMassMatrix(Msh,1/dt[4]*Ne*(g14*ew[:,1,5]-g24*ew[:,1,4]+g34*ew[:,1,3]));]
 
-phi0 = solveMUMPS(G'*Msig*G,G'*Ne'*Sources,1)
+phi0 = (G'*Msig*G)\(G'*Ne'*Sources)
 u0   = [phi0;ehat;vec(ew[:,1,2:end])];
 q = [G'*Ne'*Sources;zeros(5*size(ew,1))]
 
@@ -139,7 +139,7 @@ q = [G'*Ne'*Sources;zeros(5*size(ew,1))]
 #
 Pj     = blkdiag(-P*Ne*G,[spzeros(size(P,1),nen) P*Ne],P*Ne,P*Ne,P*Ne)
 z      = rand(Msh.nc)
-JzMat  = -Pj*solveMUMPS(dCdu,dCdm*z)
+JzMat  = -Pj*(dCdu\(dCdm*z))
 println("Getting MaxwellTime sens mat vec product")
 JzStep = getSensMatVec(z,sigma,pFor)
 errInf = norm(JzMat-JzStep,Inf)/norm(JzMat,Inf)
@@ -149,7 +149,7 @@ println("Rel. Inf and L2 norm errors in Jz are $errInf and $errSL2")
 
 #Transpose
 x       = rand(5*size(P,1))
-tmp     = -solveMUMPS(dCdu',Pj'*x)
+tmp     = -dCdu'\(Pj'*x)
 JtxMat  = dCdm'*tmp
 println("Getting MaxwellTime sens transpose mat vec product")
 JtxStep = getSensTMatVec(x,sigma,pFor)
@@ -179,7 +179,7 @@ for i=1:ns
 end
 
 #Get data at initial model
-pFor   = pFor   = getMaxwellTimeParam(Msh,Sources,P',obsTimes,dt,wave,sourceType,
+pFor = getMaxwellTimeParam(Msh,Sources,P',obsTimes,t0,dt,wave,sourceType,
                                  timeIntegrationMethod=timeIntegrationMethod)
 pFor.cgTol = 1e-15
 println("Getting data")

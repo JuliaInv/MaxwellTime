@@ -369,11 +369,11 @@ function getSensMatVecBDF2{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
             A,iSolver = getBDF2ConstDTmatrix!(dt[i],A,K,Msig,param,uniqueSteps)
             if EMsolvers[iSolver].doClear == 1
                 clear!(EMsolvers[iSolver])
-                EMsolvers[iSolver].Ainv = factorMUMPS(A,1)
+                EMsolvers[iSolver].Ainv = hasMUMPS ? factorMUMPS(A,1) : cholfact(A)
                 EMsolvers[iSolver].doClear = 0
             end
             M = Y -> begin
-                         Y = applyMUMPS(EMsolvers[iSolver].Ainv,Y)
+                         Y = hasMUMPS ? applyMUMPS(EMsolvers[iSolver].Ainv,Y) : EMsolvers[iSolver].Ainv\Y
                          return Y
                      end
             tau = dt[i]/dt[i-1]
