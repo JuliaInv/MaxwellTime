@@ -1,7 +1,7 @@
 environment:
   matrix:
-  - JULIAVERSION: "julialang/bin/winnt/x86/0.4/julia-0.4-latest-win32.exe"
-  - JULIAVERSION: "julialang/bin/winnt/x64/0.4/julia-0.4-latest-win64.exe"
+  - JULIAVERSION: "julialang/bin/winnt/x86/0.6/julia-0.6-latest-win32.exe"
+  - JULIAVERSION: "julialang/bin/winnt/x64/0.6/julia-0.6-latest-win64.exe"
   - JULIAVERSION: "julianightlies/bin/winnt/x86/julia-latest-win32.exe"
   - JULIAVERSION: "julianightlies/bin/winnt/x64/julia-latest-win64.exe"
 
@@ -23,6 +23,8 @@ install:
         "C:\projects\julia-binary.exe")
 # Run installer silently, output to C:\projects\julia
   - C:\projects\julia-binary.exe /S /D=C:\projects\julia
+  - C:\projects\julia\bin\julia -e "versioninfo(); Pkg.init(); Pkg.clone(\"https://github.com/JuliaInv/jInv.jl\"),Pkg.build(\"jInv\");Pkg.clone(\"https://github.com/JuliaInv/JOcTree")"
+
 
 build_script:
 # Need to convert from shallow to complete for Pkg.clone to work

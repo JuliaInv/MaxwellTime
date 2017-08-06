@@ -2,7 +2,6 @@ using MaxwellTime
 using JOcTree
 using Base.Test
 using jInv.Utils
-using MUMPS
 using jInv.LinearSolvers
 
 @testset "Ind src BDF2 constant step-size" begin
@@ -68,7 +67,8 @@ sigma   = zeros(M.nc)+1e-2
 sigma[Xc[:,3] .> 1024] = 1e-8
 
 sourceType = :InductiveDiscreteWire
-pFor = getMaxwellTimeParam(M,Sources,P,obsTimes,dt,wave,sourceType,timeIntegrationMethod=:BDF2Const)
+t0 = 0.0
+pFor = getMaxwellTimeParam(M,Sources,P,obsTimes,t0,dt,wave,sourceType,timeIntegrationMethod=:BDF2Const)
 
 tic()
 D,pFor = getData(sigma,pFor);
@@ -114,7 +114,7 @@ println("==========  Derivative Test - ObsTimes != step times ==================
 println(" ")
 
 obsTimes = obsTimes[1:5] + dt[1:5].*rand(5)
-pFor = getMaxwellTimeParam(M,Sources,P,obsTimes,dt,wave,sourceType,timeIntegrationMethod=:BDF2Const)
+pFor = getMaxwellTimeParam(M,Sources,P,obsTimes,t0,dt,wave,sourceType,timeIntegrationMethod=:BDF2Const)
 
 function f2(sigdum)
   d, = getData(sigdum,pFor)
