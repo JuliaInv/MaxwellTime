@@ -12,8 +12,7 @@ notifications:
 before_install:
   - julia -e 'Pkg.clone("https://github.com/JuliaInv/jInv.jl","jInv");
               Pkg.build("jInv");
-              Pkg.clone("https://github.com/JuliaInv/JOcTree.jl");
-              Pkg.add("KrylovMethods")'
+              Pkg.clone("git@github.com:JuliaInv/JOcTree.git")'
   - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
 
 script:
