@@ -13,6 +13,13 @@ println("==========  Test BDF2 sensitivities Ind Src ======================")
 println(" ")
 include("testMaxwellTimeIndSrc-BDF2const.jl")
 include("testMaxwellTimeIndSrc-BDF2vardt.jl")
+hasMUMPS = false
+try
+    using MUMPS
+    hasMUMPS = true
+catch
+end
+if hasMUMPS
 println(" ")
 println("==========  Test BE sensitivities Grd Src ======================")
 println(" ")
@@ -22,4 +29,5 @@ println("==========  Test BDF2 sensitivities Grd Src ======================")
 println(" ")
 include("testMaxwellTimeGrdSrc-BDF2.jl")
 include("testMaxwellTimeGrdSrc-BDF2-var-step-size.jl")
+end
 end

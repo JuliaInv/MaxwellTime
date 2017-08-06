@@ -6,7 +6,6 @@ using JOcTree
 using Base.Test
 using jInv.LinearSolvers
 using jInv.Utils
-using MUMPS
 
 @testset "Grd src BE time-stepping" begin
 println("Testing single source")
@@ -57,7 +56,8 @@ mu    = mu0*(1+chi)
 #Get data at initial model
 sourceType = :Galvanic
 obsTimes   = [0;cumsum(dt)]
-pFor       = getMaxwellTimeParam(Msh,Sources,P',obsTimes,dt,wave,sourceType)
+t0         = 0.0
+pFor       = getMaxwellTimeParam(Msh,Sources,P',obsTimes,t0,dt,wave,sourceType)
 println("Getting data")
 d,pFor = getData(sigma,pFor)
 ew     = pFor.fields
@@ -99,7 +99,7 @@ dCdu  = [G'*Msig*G blnkn;
 
 Pj     = blkdiag(-P*Ne*G,P*Ne,P*Ne,P*Ne,P*Ne)
 z      = rand(Msh.nc)
-JzMat  = -Pj*solveMUMPS(dCdu,dCdm*z)
+JzMat  = -Pj*(dCdu\(dCdm*z))
 println("Getting MaxwellTime sens mat vec product")
 JzStep = getSensMatVec(z,sigma,pFor)
 errInf = norm(JzMat-JzStep,Inf)/norm(JzMat,Inf)
@@ -109,7 +109,7 @@ println("Relative Inf and L2 norm errors in Jz are $errInf and $errSL2")
 
 #Transpose
 x       = rand(5*size(P,1))
-tmp     = solveMUMPS(dCdu',Pj'*x)
+tmp     = dCdu'\(Pj'*x)
 JtxMat  = -dCdm'*tmp
 println("Getting MaxwellTime sens transpose mat vec product")
 JtxStep = getSensTMatVec(x,sigma,pFor)
@@ -138,7 +138,7 @@ end
 
 #Get data at initial model
 obsTimes = [0.0;1.5e-4;2.5e-4;5e-4]
-pFor     = getMaxwellTimeParam(Msh,Sources,P',obsTimes,dt,wave,sourceType)
+pFor     = getMaxwellTimeParam(Msh,Sources,P',obsTimes,t0,dt,wave,sourceType)
 println("Getting data")
 D,pFor   = getData(sigma,pFor)
 
@@ -190,7 +190,7 @@ println(" ")
 m  = MaxwellTimeModel(sigma,chi,false,true)
 m0 = MaxwellTimeModel(sigma,zeros(length(chi)),false,false)
 obsTimes   = cumsum(dt[2:end])
-pFor       = getMaxwellTimeParam(Msh,Sources,P',obsTimes,dt,wave,sourceType)
+pFor       = getMaxwellTimeParam(Msh,Sources,P',obsTimes,t0,dt,wave,sourceType)
 d,pFor = getData(m,pFor)
 
 function f2(sigdum)
@@ -242,7 +242,7 @@ println(" ")
 
 m    = MaxwellTimeModel(log.(sigma),chi,true,true)
 m0   = MaxwellTimeModel(zeros(length(sigma)),zeros(length(chi)),false,false)
-pFor = getMaxwellTimeParam(Msh,Sources,P',obsTimes,dt,wave,sourceType)
+pFor = getMaxwellTimeParam(Msh,Sources,P',obsTimes,t0,dt,wave,sourceType)
 
 function f3(sigdum)
   d, = getData(sigdum,pFor)
