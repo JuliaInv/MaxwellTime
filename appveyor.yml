@@ -23,7 +23,7 @@ install:
         "C:\projects\julia-binary.exe")
 # Run installer silently, output to C:\projects\julia
   - C:\projects\julia-binary.exe /S /D=C:\projects\julia
-  - C:\projects\julia\bin\julia -e "versioninfo(); Pkg.init(); Pkg.clone(\"https://github.com/JuliaInv/jInv.jl\"),Pkg.build(\"jInv\");Pkg.clone(\"git@github.com:JuliaInv/JOcTree.git\")"
+  - C:\projects\julia\bin\julia -e "versioninfo(); Pkg.init(); Pkg.clone(\"https://github.com/JuliaInv/jInv.jl\"),Pkg.build(\"jInv\");Pkg.clone(\"https://github.com/JuliaInv/JOcTree.git\")"
 
 
 build_script:
