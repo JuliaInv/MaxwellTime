@@ -138,10 +138,8 @@ function getSensTMatVecBE{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
 
         for j = 1:ns
             if invertSigma
-                Gzi        = (1/dt[i])*getdEdgeMassMatrix(Mesh,Ne*(ew[:,j,i+1]-ew[:,j,i]))
                 A_mul_B!(Nelam,Ne,lam[:,j,1]) # Nelam = Ne*lam[:,j,1]
-                At_mul_B!(GzitNelam,Gzi,Nelam) # Gzi'*Nelam
-                JTvSigma   .-= GzitNelam
+                JTvSigma   .-= (1/dt[i])*dEdgeMassMatrixTrTimesVector(Mesh,sigma,Ne*(ew[:,j,i+1]-ew[:,j,i]),Nelam)
             end
             if invertMu
                 curle      = Curl*ew[:,j,i+1]

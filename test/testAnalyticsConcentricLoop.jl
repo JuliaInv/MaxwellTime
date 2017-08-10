@@ -55,16 +55,17 @@ P = getEdgeIntegralOfPolygonalChain(M,Rx,normalize=true)
 
 dt    = (1e-5)*ones(100)
 t     = cumsum(dt)
+t0    = 0.0
 wave  = zeros(length(dt)+1)
 wave[1] = 1.0
 obsTimes = cumsum(dt[1:end-1])
 
 sourceType = :InductiveDiscreteWire
-pForDisc   = getMaxwellTimeParam(M,MeS,P,obsTimes,dt,wave,sourceType;
+pForDisc   = getMaxwellTimeParam(M,MeS,P,obsTimes,t0,dt,wave,sourceType;
                                  timeIntegrationMethod=:BE)
 
 sourceType = :InductiveDiscreteWire
-pForAnal   = getMaxwellTimeParam(M,Aloop,P,obsTimes,dt,wave,sourceType;
+pForAnal   = getMaxwellTimeParam(M,Aloop,P,obsTimes,t0,dt,wave,sourceType;
                                  timeIntegrationMethod=:BDF2Const)
 
 #Setup model
