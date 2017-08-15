@@ -13,6 +13,13 @@ try
 catch
 end
 
+hasPardiso = false
+try
+    using Pardiso
+    hasPardiso = true
+catch
+end
+
 # We will add MaxwellTime specific subtypes/methods
 # to the following jInv generics
 import jInv.ForwardShare.ForwardProbType
