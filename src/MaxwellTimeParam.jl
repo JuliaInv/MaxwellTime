@@ -146,14 +146,14 @@ Input:  Mandatory arguments:
                                we'll add exponential integrators at some
                                point too.
 
-        EMSolverType::Symbol - Linear solver for EM time-stepping solves.
+        EMsolverType::Symbol - Linear solver for EM time-stepping solves.
                                Currently supported options
                                are :MUMPS, :Pardiso and :JuliaSolver (to use
                                Julia's built in sparse Cholesky routine,
                                which I believe is cholmod, from SuiteSparse).
                                Default is :MUMPS
 
-        DCSolverType::Symbol - Solver for DC problem for galvanic sources.
+        DCsolverType::Symbol - Solver for DC problem for galvanic sources.
                                Same options as EMSolverType.
 
 
