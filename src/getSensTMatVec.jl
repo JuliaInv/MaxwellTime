@@ -121,7 +121,7 @@ function getSensTMatVecBE{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
     JTvMu       = zeros(T,length(mu))
     dt          = [dt[:];dt[end]]
     uniqueSteps = unique(dt)
-    A           = spzeros(T,0,0)
+    A           = speye(size(Ne,2)) #spzeros(T,0,0)
     iSolver     = 0
     dtLast      = -1.0 # Size of last time step, used to check if
                       # factorization of Forward mod. matrix is needed.
@@ -268,7 +268,7 @@ function getSensTMatVecBDF2{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
 #      JTvMu    = 0
     JTv = zeros(T,Mesh.nc)
     uniqueSteps = unique(dt)
-    A           = spzeros(T,0,0)
+    A           = speye(size(Ne,2)) #spzeros(T,0,0)
     iSolver     = 0
     #A,iSolver   = getBDF2ConstDTmatrix!(dt[end],A,K,Msig,param,uniqueSteps)
     dt          = [dt;dt[end];dt[end]]
@@ -465,7 +465,7 @@ function getSensTMatVecBDF2ConstDT{T<:Real}(z::Vector{T},model::MaxwellTimeModel
 #     JTvMu    = 0
     JTv = 0
     uniqueSteps = [dt]
-    A           = spzeros(T,0,0)
+    A           = speye(size(Ne,2)) #spzeros(T,0,0)
     A,iSolver   = getBDF2ConstDTmatrix!(dt,A,K,Msig,param,uniqueSteps)
     for i=nt:-1:2
       for j = 1:ns

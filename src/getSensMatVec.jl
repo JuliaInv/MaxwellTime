@@ -184,7 +184,7 @@ function getSensMatVecBE{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
 
     iSolver     = 0
     uniqueSteps = unique(dt)
-    A           = spzeros(T,0,0)
+    A           = speye(size(Ne,2)) #spzeros(T,0,0)
     for i=1:nt
         # Form A when needed. It is not stored or formed if
         # param.storageLevel == :Factors
@@ -350,7 +350,7 @@ function getSensMatVecBDF2{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
         error("Inverting for mu with bdf2 time-stepping not yet supported")
     end
     uniqueSteps = unique(dt)
-    A           = spzeros(T,0,0)
+    A           = speye(size(Ne,2)) # spzeros(T,0,0)
     A,iSolver   = getBDF2ConstDTmatrix!(dt[1],A,K,Msig,param,uniqueSteps)
     for j = 1:ns
         Gzi                 = 3/(2*dt[1])*Ne'*getdEdgeMassMatrix(Mesh,Ne*(ehat[:,j]-ew[:,j,1]))
@@ -522,7 +522,7 @@ function getSensMatVecBDF2ConstDT{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
         error("Inverting for mu with bdf2 time-stepping not yet supported")
     end
     uniqueSteps = [dt]
-    A           = spzeros(T,0,0)
+    A           = speye(size(Ne,2)) #spzeros(T,0,0)
     A,iSolver   = getBDF2ConstDTmatrix!(dt,A,K,Msig,param,uniqueSteps)
     for j = 1:ns
         Gzi                 = 3/(2*dt)*Ne'*getdEdgeMassMatrix(M,Ne*(ehat[:,j]-ew[:,j,1]))
