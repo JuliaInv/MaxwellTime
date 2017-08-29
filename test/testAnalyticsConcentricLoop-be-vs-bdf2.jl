@@ -12,28 +12,32 @@ include("/home/patrick/Dropbox/Sample/juliaSetup/pForSetupFuncs.jl")
 L = [30720;30720;30720]
 #x0  = -5120.0*ones(3) # For multiples of 10m cells
 x0 = -15360.0*ones(3)
-h  = 30.0
-n = [1024;1024;1024]
+h  = [30.0;30.0;15.0]
+n = [1024;1024;2048]
 S = createOcTreeFromBox(
         x0[1], x0[2], x0[3],
         n[1], n[2], n[3],
-           h,    h,    h,
-        -200.0, 200.0, -200.0, 200.0, -200.0, 200.0,
-        1, 2)
-M = getOcTreeMeshFV(S,h*ones(3);x0=x0)
+        h[1], h[2], h[3],
+        -200.0, 200.0, -200.0, 200.0, 0.0, 0.0,
+        1, 1)
+M = getOcTreeMeshFV(S,h;x0=x0)
 Xn = getNodalGrid(M)
 Ex, Ey, Ez = getEdgeGrids(M)
 E = [Ex;Ey;Ez]
 Fx,Fy,Fz = getFaceGrids(M)
 nEx,nEy,nEz = getEdgeNumbering(M)
 l = 2.0
-Tx = [  h/2-l/2  h/2-l/2 0.0;
-        h/2-l/2  h/2+l/2 0.0;
-        h/2+l/2  h/2+l/2 0.0;
-        h/2+l/2  h/2-l/2 0.0;
-        h/2-l/2  h/2-l/2 0.0]
+Tx = [  h[1]/2-l/2  h[2]/2-l/2 0.0;
+        h[1]/2-l/2  h[2]/2+l/2 0.0;
+        h[1]/2+l/2  h[2]/2+l/2 0.0;
+        h[1]/2+l/2  h[2]/2-l/2 0.0;
+        h[1]/2-l/2  h[2]/2-l/2 0.0]
 
-
+Tx2 = [ h[1]/2-l/2  h[2]/2-l/2 34.0;
+        h[1]/2-l/2  h[2]/2+l/2 34.0;
+        h[1]/2+l/2  h[2]/2+l/2 34.0;
+        h[1]/2+l/2  h[2]/2-l/2 34.0;
+        h[1]/2-l/2  h[2]/2-l/2 34.0]
 
 MeS = getEdgeIntegralOfPolygonalChain(M,Tx)
 a = sqrt((l^2)/pi)

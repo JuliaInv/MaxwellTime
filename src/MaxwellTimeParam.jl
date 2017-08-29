@@ -225,10 +225,10 @@ function getMaxwellTimeParam{S<:Real}(Mesh::AbstractMesh,
     # to observation times
     ObsTimeMat = getObsTimeMatrix(ObsTimes,t0,dt,size(Obs,2),size(s,2),sourceType)
 
-    if sourceType == :InductiveAnalyticLoop
+    if sourceType == :InductiveLoopPotential
         K = getMaxwellCurlCurlMatrix(Mesh,fill(pi*4e-7,Mesh.nc))
-        s = -K*s
-        return MaxwellTimeParam(Mesh,s,Obs,ObsTimeMat,dt,wave,sourceType,storageLevel,
+        s = -0.5*K*s
+        return MaxwellTimeParam(Mesh,s,Obs,ObsTimeMat,t0,dt,wave,sourceType,storageLevel,
                                 sensitivityMethod,timeIntegrationMethod,
                                 EMsolvers,DCsolver,K)
     else
