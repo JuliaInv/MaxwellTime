@@ -57,6 +57,7 @@ wave     = zeros(length(dt)+1); wave[1] = 1.0
 
 sigma   = zeros(M.nc)+1e-2
 sigma[Xc[:,3] .> 1024] = 1e-8
+sigma   = 1./sigma
 
 sourceType = :InductiveDiscreteWire
 t0 = 0.0
