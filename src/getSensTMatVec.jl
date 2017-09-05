@@ -175,7 +175,7 @@ function getSensTMatVecBE{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
         rhs      = pz0 - 1/dt[1]*G'*Msig*lam[:,:,2]
         lam0,DCsolver = solveDC!(A,rhs,DCsolver)
         for j = 1:ns
-            Gzi      = G'*DrhoDsig*Ne'*getdEdgeMassMatrix(Mesh,-Ne*ew[:,j,1])
+            Gzi      = G'*DrhoDsig*Ne'*getdEdgeMassMatrix(Mesh,sigma,-Ne*ew[:,j,1])
             JTvSigma = JTvSigma -Gzi'*lam0[:,j]
         end
         if param.storageLevel != :Factors
@@ -318,10 +318,10 @@ function getSensTMatVecBDF2{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
                 end
             end
             if i>1
-                Gzi = getdEdgeMassMatrix(Mesh,1/dt[i]*Ne*(g1*ew[:,j,i+1]-
+                Gzi = getdEdgeMassMatrix(Mesh,sigma,1/dt[i]*Ne*(g1*ew[:,j,i+1]-
                               g2*ew[:,j,i] + g3*ew[:,j,i-1]))
             else
-                Gzi = getdEdgeMassMatrix(Mesh,1/dt[1]*Ne*(1.5*ew[:,j,2]-
+                Gzi = getdEdgeMassMatrix(Mesh,sigma,1/dt[1]*Ne*(1.5*ew[:,j,2]-
                                               0.75*ehat[:,j]-0.75*ew[:,j,1]))
             end
             A_mul_B!(nelam,Ne,lam[:,j,1]) # nelam = Ne*lam[:,j,1]
@@ -339,7 +339,7 @@ function getSensTMatVecBDF2{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
         rhs = 3/(4*dt[1])*Msig*lam[:,j,2]
         lmTmp[:,j],EMsolvers[iSolver] = solveMaxTimeBDF2ConstDT!(A,rhs,Msig,
                                                   Mesh,dt[1],EMsolvers[iSolver])
-        Gzi = getdEdgeMassMatrix(Mesh,3/(2*dt[1])*Ne*(ehat[:,j]-ew[:,j,1]))
+        Gzi = getdEdgeMassMatrix(Mesh,sigma,3/(2*dt[1])*Ne*(ehat[:,j]-ew[:,j,1]))
         A_mul_B!(nelam,Ne,lmTmp[:,j])
         At_mul_B!(Gzitnelam,Gzi,nelam) # Gzi'*nelam
         JTv .-= Gzitnelam
@@ -370,7 +370,7 @@ function getSensTMatVecBDF2{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
                              3/(4*dt[1])*G'*Msig*lam[:,j,2] -
                              3/(2*dt[1])*G'*Msig*lmTmp[:,j]
             lam0,DCsolver = solveDC!(A,rhs,DCsolver)
-            Gzi           = getdEdgeMassMatrix(Mesh,-Ne*ew[:,j,1])
+            Gzi           = getdEdgeMassMatrix(Mesh,sigma,-Ne*ew[:,j,1])
             JTv           .-= Gzi'*(Ne*G*lam0)
             #tmp[1:nn] = lam0
         end
@@ -475,7 +475,7 @@ function getSensTMatVecBDF2ConstDT{T<:Real}(z::Vector{T},model::MaxwellTimeModel
           lam[:,j,1],EMsolver = solveMaxTimeBDF2ConstDT!(A,rhs,Msig,M,dt,EMsolver)
           EMsolver.doClear = 0
         end
-        Gzi = (1/dt)*getdEdgeMassMatrix(M,Ne*(1.5*ew[:,j,i+1]-2*ew[:,j,i]+
+        Gzi = (1/dt)*getdEdgeMassMatrix(M,sigma,Ne*(1.5*ew[:,j,i+1]-2*ew[:,j,i]+
                                         0.5*ew[:,j,i-1]))
         JTv = JTv - Gzi'*(Ne*lam[:,j,1])
         lam[:,j,3] = lam[:,j,2]
@@ -487,7 +487,7 @@ function getSensTMatVecBDF2ConstDT{T<:Real}(z::Vector{T},model::MaxwellTimeModel
     for j = 1:ns
       rhs                 = pz[:,j,1] + 1/dt*Msig*(2*lam[:,j,2]-0.5*lam[:,j,3])
       lam[:,j,1],EMsolver = solveMaxTimeBDF2ConstDT!(A,rhs,Msig,M,dt,EMsolver)
-      Gzi                 = getdEdgeMassMatrix(M,1/dt*Ne*(1.5*ew[:,j,2]-0.75*ehat[:,j]-0.75*ew[:,j,1]))
+      Gzi                 = getdEdgeMassMatrix(M,sigma,1/dt*Ne*(1.5*ew[:,j,2]-0.75*ehat[:,j]-0.75*ew[:,j,1]))
       JTv                 = JTv - Gzi'*(Ne*lam[:,j,1])
       lam[:,j,3]          = lam[:,j,2]
       lam[:,j,2]          = lam[:,j,1]
@@ -498,7 +498,7 @@ function getSensTMatVecBDF2ConstDT{T<:Real}(z::Vector{T},model::MaxwellTimeModel
     for j = 1:ns
       rhs = 3/(4*dt)*Msig*lam[:,j,2]
       lmTmp[:,j],EMsolver = solveMaxTimeBDF2ConstDT!(A,rhs,Msig,M,dt,EMsolver)
-      Gzi                 = getdEdgeMassMatrix(M,3/(2*dt)*Ne*(ehat[:,j]-ew[:,j,1]))
+      Gzi                 = getdEdgeMassMatrix(M,sigma,3/(2*dt)*Ne*(ehat[:,j]-ew[:,j,1]))
       JTv                 = JTv - Gzi'*Ne*lmTmp[:,j]
     end
     if storageLevel != :Factors
@@ -522,7 +522,7 @@ function getSensTMatVecBDF2ConstDT{T<:Real}(z::Vector{T},model::MaxwellTimeModel
                              3/(4*dt)*G'*Msig*lam[:,j,2] -
                              3/(2*dt)*G'*Msig*lmTmp[:,j]
             lam0,DCsolver = solveDC!(A,rhs,DCsolver)
-            Gzi           = getdEdgeMassMatrix(M,-Ne*ew[:,j,1])
+            Gzi           = getdEdgeMassMatrix(M,sigma,-Ne*ew[:,j,1])
             JTv           = JTv - Gzi'*(Ne*G*lam0)
         end
         if param.storageLevel != :Factors

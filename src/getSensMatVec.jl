@@ -354,11 +354,11 @@ function getSensMatVecBDF2{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
     A           = speye(size(Ne,2)) # spzeros(T,0,0)
     A,iSolver   = getBDF2ConstDTmatrix!(dt[1],A,K,Msig,param,uniqueSteps)
     for j = 1:ns
-        Gzi                 = 3/(2*dt[1])*Ne'*getdEdgeMassMatrix(Mesh,Ne*(ehat[:,j]-ew[:,j,1]))
+        Gzi                 = 3/(2*dt[1])*Ne'*getdEdgeMassMatrix(Mesh,sigma,Ne*(ehat[:,j]-ew[:,j,1]))
         rhs                 = Gzi*DsigDmz + 3/(2*dt[1])*Msig*lam[:,j,1]
         lmTmp,EMsolvers[1]      = solveMaxTimeBDF2ConstDT!(A,rhs,Msig,Mesh,dt[1],EMsolvers[1])
         EMsolvers[1].doClear    = 0
-        Gzi                 = Ne'*getdEdgeMassMatrix(Mesh,1/dt[1]*Ne*(1.5*ew[:,j,2]-0.75*ehat[:,j]-0.75*ew[:,j,1]))
+        Gzi                 = Ne'*getdEdgeMassMatrix(Mesh,sigma,1/dt[1]*Ne*(1.5*ew[:,j,2]-0.75*ehat[:,j]-0.75*ew[:,j,1]))
         rhs                 = Gzi*DsigDmz + 3/(4*dt[1])*Msig*lam[:,j,1] + 3/(4*dt[1])*Msig*lmTmp
         lam[:,j,2],EMsolvers[1] = solveMaxTimeBDF2ConstDT!(A,rhs,Msig,Mesh,dt[1],EMsolvers[1])
         Jv[:,j,1]           = -P'*lam[:,j,2]
@@ -383,7 +383,7 @@ function getSensMatVecBDF2{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
             g3  = (tau^2)/(1+tau)
             Atr = K + (g1/dt[i])*Msig
             for j = 1:ns
-                Gzi = getdEdgeMassMatrix(Mesh,Ne*(g1*ew[:,j,i+1]-
+                Gzi = getdEdgeMassMatrix(Mesh,sigma,Ne*(g1*ew[:,j,i+1]-
                        g2*ew[:,j,i]+g3*ew[:,j,i-1]))*DsigDmz
                 rhs = (1/dt[i])*(Ne'*Gzi +
                       Msig*(g2*lam[:,j,2]-g3*lam[:,j,1]))
@@ -400,7 +400,7 @@ function getSensMatVecBDF2{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
         else
             for j = 1:ns
 
-       	        Gzi = (1/dt[i])*Ne'*getdEdgeMassMatrix(Mesh,Ne*(1.5*ew[:,j,i+1]-
+       	        Gzi = (1/dt[i])*Ne'*getdEdgeMassMatrix(Mesh,sigma,Ne*(1.5*ew[:,j,i+1]-
        	               2*ew[:,j,i]+0.5*ew[:,j,i-1]))
        	        rhs = Gzi*DsigDmz + 1/dt[i]*Msig*(2*lam[:,j,2]-0.5*lam[:,j,1])
        	        lam[:,j,3],EMsolvers[iSolver] = solveMaxTimeBDF2ConstDT!(A,rhs,Msig,Mesh,dt[i],EMsolvers[iSolver])
