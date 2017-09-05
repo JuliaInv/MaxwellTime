@@ -55,7 +55,7 @@ function getSensTMatVecBE{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
     # magnetic permeability
 
     # Unpack model into conductivity and magnetic permeability
-    sigma       = 1./model.sigma
+    sigma = param.modUnits == :res ? 1./model.sigma : model.sigma
     mu          = model.mu
     invertSigma = model.invertSigma
     invertMu    = model.invertMu
@@ -73,7 +73,7 @@ function getSensTMatVecBE{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
     Msig   = getEdgeMassMatrix(Mesh,vec(sigma))
     Msig   = Ne'*Msig*Ne
     P      = Ne'*param.Obs
-    DrhoDsig = spdiagm(-(sigma.^2))
+    DrhoDsig = param.modUnits == :res ? spdiagm(-(sigma.^2)) : UniformScaling(1.0)
     if invertMu || (param.storageLevel == :None)
         Nf,Qf,    = getFaceConstraints(Mesh)
         Curl      = getCurlMatrix(Mesh)

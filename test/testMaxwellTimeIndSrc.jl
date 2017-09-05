@@ -61,7 +61,7 @@ sigma   = 1./sigma
 
 sourceType = :InductiveDiscreteWire
 t0 = 0.0
-pFor = getMaxwellTimeParam(M,Sources,P,obsTimes,t0,dt,wave,sourceType)
+pFor = getMaxwellTimeParam(M,Sources,P,obsTimes,t0,dt,wave,sourceType,modUnits=:res)
 
 tic()
 D,pFor = getData(sigma,pFor);

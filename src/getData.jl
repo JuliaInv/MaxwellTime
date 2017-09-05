@@ -46,7 +46,7 @@ function getData(model::MaxwellTimeModel,param::MaxwellTimeParam,doClear::Bool=f
     #println("Worker $(myid()) reached local get data method")
 
     # Unpack model into conductivity and magnetic permeability
-    sigma = 1./model.sigma
+    sigma = param.modUnits == :res ? 1./model.sigma : model.sigma
     mu    = model.mu
 
     #Unpack param
