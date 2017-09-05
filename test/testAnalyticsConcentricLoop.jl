@@ -28,16 +28,17 @@ Fx,Fy,Fz = getFaceGrids(M)
 nEx,nEy,nEz = getEdgeNumbering(M)
 rLoop = 13.5; areaLoop = pi*rLoop^2
 rModel = sqrt(1/pi); lModel = 1.0; lLoop = sqrt(areaLoop)
-Tx = [  h/2-lModel/2  h/2-lModel/2 0.0;
-        h/2-lModel/2  h/2+lModel/2 0.0;
-        h/2+lModel/2  h/2+lModel/2 0.0;
-        h/2+lModel/2  h/2-lModel/2 0.0;
-        h/2-lModel/2  h/2-lModel/2 0.0]
+txHeight = 0.0
+Tx = [  h/2-lModel/2  h/2-lModel/2 txHeight;
+        h/2-lModel/2  h/2+lModel/2 txHeight;
+        h/2+lModel/2  h/2+lModel/2 txHeight;
+        h/2+lModel/2  h/2-lModel/2 txHeight;
+        h/2-lModel/2  h/2-lModel/2 txHeight]
 
 
 
 MeS = getEdgeIntegralOfPolygonalChain(M,Tx)
-Aloop = 0.5*staticCurrentLoopVectorPotential(M,rModel,[h/2;h/2;h])
+Aloop = staticCurrentLoopVectorPotential(M,rModel,[h/2;h/2;txHeight])
 Ne,Qe, = getEdgeConstraints(M)
 Nf,Qf, = getFaceConstraints(M)
 C      = getCurlMatrix(M)
@@ -53,7 +54,7 @@ Rx = copy(Tx)
 # Rx[:,2] .+= 10
 P = getEdgeIntegralOfPolygonalChain(M,Rx,normalize=true)
 
-dt    = (1e-5)*ones(100)
+dt    = (5e-6)*ones(200)
 t     = cumsum(dt)
 t0    = 0.0
 wave  = zeros(length(dt)+1)
@@ -62,11 +63,11 @@ obsTimes = cumsum(dt[1:end-1])
 
 sourceType = :InductiveDiscreteWire
 pForDisc   = getMaxwellTimeParam(M,MeS,P,obsTimes,t0,dt,wave,sourceType;
-                                 timeIntegrationMethod=:BDF2)
+                                 timeIntegrationMethod=:BE)
 
 sourceType = :InductiveLoopPotential
 pForAnal   = getMaxwellTimeParam(M,Aloop,P,obsTimes,t0,dt,wave,sourceType;
-                                 timeIntegrationMethod=:BDF2)
+                                 timeIntegrationMethod=:BE)
 
 #Setup model
 Xc = getCellCenteredGrid(M)
