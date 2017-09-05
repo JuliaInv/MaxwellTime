@@ -12,8 +12,8 @@ include("/home/patrick/Dropbox/Sample/juliaSetup/pForSetupFuncs.jl")
 L = [30720;30720;30720]
 #x0  = -5120.0*ones(3) # For multiples of 10m cells
 x0 = -15360.0*ones(3)
-h  = 15.0
-n = 2*[1024;1024;1024]
+h  = 30.0
+n = [1024;1024;1024]
 S = createOcTreeFromBox(
         x0[1], x0[2], x0[3],
         n[1], n[2], n[3],

@@ -103,7 +103,7 @@ function getSensMatVecBE{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
     #         |                     .                       |
 
     # Unpack model into conductivity and magnetic permeability
-    sigma       = model.sigma
+    sigma = param.modUnits == :res ? 1./model.sigma : model.sigma
     mu          = model.mu
     invertSigma = model.invertSigma
     invertMu    = model.invertMu
@@ -117,10 +117,11 @@ function getSensMatVecBE{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
     s             = param.Sources
 
     # Get matrices
-    Ne,Qe, = getEdgeConstraints(Mesh)
-    Msig   = getEdgeMassMatrix(Mesh,vec(sigma))
-    Msig   = Ne'*Msig*Ne
-    P      = Ne'*param.Obs
+    Ne,Qe,   = getEdgeConstraints(Mesh)
+    Msig     = getEdgeMassMatrix(Mesh,vec(sigma))
+    Msig     = Ne'*Msig*Ne
+    P        = Ne'*param.Obs
+    DrhoDsig = param.modUnits == :res ? spdiagm(-(sigma.^2)) : UniformScaling(1.0)
     if invertMu || (param.storageLevel == :None)
         Nf,Qf,    = getFaceConstraints(Mesh)
         Curl      = getCurlMatrix(Mesh)
@@ -161,7 +162,7 @@ function getSensMatVecBE{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
         rhs    = zeros(T,size(G,2),ns)
         for j = 1:ns
             Gzi      = G'*Ne'*getdEdgeMassMatrix(Mesh,sigma,-Ne*ew[:,j,1])
-            rhs[:,j] = Gzi*DsigDmz
+            rhs[:,j] = Gzi*DrhoDsig*DsigDmz
         end
         lam0,DCsolver = solveDC!(A,rhs,DCsolver)
         lam[:,:,1]    = -G*lam0 #Taking gradient of lam0
@@ -193,7 +194,7 @@ function getSensMatVecBE{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
         end
         rhs = 1/dt[i]*Msig*lam[:,:,1]
         if invertSigma
-            addDCDsigmaBE!(Mesh,sigma,Ne,ew[:,:,i:i+1],dt[i],DsigDmz,ns,rhs)
+            addDCDsigmaBE!(Mesh,sigma,Ne,ew[:,:,i:i+1],dt[i],DrhoDsig*DsigDmz,ns,rhs)
         end
         if invertMu
             addDCDmuBE!(Mesh,mu,Nf,Curl,ew[:,:,i+1],DmuinvDmu*DmuDmz,ns,rhs)
