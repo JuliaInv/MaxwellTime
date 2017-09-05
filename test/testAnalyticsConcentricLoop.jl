@@ -12,8 +12,8 @@ include("/home/patrick/Dropbox/Sample/juliaSetup/pForSetupFuncs.jl")
 L = [30720;30720;30720]
 #x0  = -5120.0*ones(3) # For multiples of 10m cells
 x0 = -15360.0*ones(3)
-h  = 15.0
-n = 2*[1024;1024;1024]
+h  = 30.0
+n = [1024;1024;1024]
 S = createOcTreeFromBox(
         x0[1], x0[2], x0[3],
         n[1], n[2], n[3],
@@ -28,11 +28,11 @@ Fx,Fy,Fz = getFaceGrids(M)
 nEx,nEy,nEz = getEdgeNumbering(M)
 rLoop = 13.5; areaLoop = pi*rLoop^2
 rModel = sqrt(1/pi); lModel = 1.0; lLoop = sqrt(areaLoop)
-Tx = [  h/2-lModel/2  h/2-lModel/2 0.0;
-        h/2-lModel/2  h/2+lModel/2 0.0;
-        h/2+lModel/2  h/2+lModel/2 0.0;
-        h/2+lModel/2  h/2-lModel/2 0.0;
-        h/2-lModel/2  h/2-lModel/2 0.0]
+Tx = [  h/2-lModel/2  h/2-lModel/2 h;
+        h/2-lModel/2  h/2+lModel/2 h;
+        h/2+lModel/2  h/2+lModel/2 h;
+        h/2+lModel/2  h/2-lModel/2 h;
+        h/2-lModel/2  h/2-lModel/2 h]
 
 
 
@@ -62,15 +62,15 @@ obsTimes = cumsum(dt[1:end-1])
 
 sourceType = :InductiveDiscreteWire
 pForDisc   = getMaxwellTimeParam(M,MeS,P,obsTimes,t0,dt,wave,sourceType;
-                                 timeIntegrationMethod=:BDF2)
+                                 timeIntegrationMethod=:BE)
 
 sourceType = :InductiveLoopPotential
 pForAnal   = getMaxwellTimeParam(M,Aloop,P,obsTimes,t0,dt,wave,sourceType;
-                                 timeIntegrationMethod=:BDF2)
+                                 timeIntegrationMethod=:BE)
 
 #Setup model
 Xc = getCellCenteredGrid(M)
-sigBg  = 5e-4
+sigBg  = 1e-4
 sigAir = 1e-8
 sigma  = sigBg*ones(M.nc)
 Iair   = find(Xc[:,3] .> 0.0)

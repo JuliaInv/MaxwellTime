@@ -18,6 +18,7 @@ type MaxwellTimeParam{S<:Real,T<:AbstractSolver,U<:AbstractSolver} <: ForwardPro
     timeIntegrationMethod::Symbol
     EMsolvers::Vector{T}
     DCsolver::U
+    modUnits::Symbol
     K::SparseMatrixCSC
     Matrices::Vector{SparseMatrixCSC}
     fields::Array{S}
@@ -36,22 +37,23 @@ type MaxwellTimeParam{S<:Real,T<:AbstractSolver,U<:AbstractSolver} <: ForwardPro
                      ObsTimes::AbstractArray{S},t0::S,dt::Vector{S},wave::Vector{S},sourceType::Symbol,
                      storageLevel::Symbol,sensitivityMethod::Symbol,
                      timeIntegrationMethod::Symbol,EMsolvers::Vector{T},
-                     DCsolver::U) where {S<:Real,T<:AbstractSolver,U<:AbstractSolver} = new(
+                     DCsolver::U,
+                     modUnits::Symbol) where {S<:Real,T<:AbstractSolver,U<:AbstractSolver} = new(
                                         Mesh,Sources,Obs,ObsTimes,t0,dt,wave,sourceType,
                                         storageLevel,sensitivityMethod,
                                         timeIntegrationMethod,
-                                        EMsolvers,DCsolver)
+                                        EMsolvers,DCsolver,modUnits)
 
     MaxwellTimeParam{S,T,U}(Mesh::AbstractMesh,Sources::AbstractArray{S},Obs::AbstractArray{S},
                      ObsTimes::AbstractArray{S},t0::S,dt::Vector{S},wave::Vector{S},sourceType::Symbol,
                      storageLevel::Symbol,sensitivityMethod::Symbol,
                      timeIntegrationMethod::Symbol,EMsolvers::Vector{T},
-                     DCsolver::U,K::SparseMatrixCSC) where
+                     DCsolver::U,modUnits::Symbol,K::SparseMatrixCSC) where
                      {S<:Real,T<:AbstractSolver,U<:AbstractSolver} = new(
                                      Mesh,Sources,Obs,ObsTimes,t0,dt,wave,
                                      sourceType,storageLevel,sensitivityMethod,
                                      timeIntegrationMethod,
-                                     EMsolvers,DCsolver,K)
+                                     EMsolvers,DCsolver,modUnits,K)
 end
 
 # Unfortunately parametric types need these matching outer and inner constructors
@@ -59,24 +61,26 @@ MaxwellTimeParam{S,T,U}(Mesh::AbstractMesh,Sources::AbstractArray{S},Obs::Abstra
 	                 ObsTimes::AbstractArray{S},t0::S,dt::Vector{S},wave::Vector{S},sourceType::Symbol,
 	                 storageLevel::Symbol,sensitivityMethod::Symbol,
 	                 timeIntegrationMethod::Symbol,EMsolvers::Vector{T},
-	                 DCsolver::U) = MaxwellTimeParam{S,T,U}(
+	                 DCsolver::U,modUnits::Symbol) = MaxwellTimeParam{S,T,U}(
 	                                                 Mesh,Sources,Obs,ObsTimes,
                                                      t0,dt,wave,
 	                                                 sourceType,storageLevel,
 	                                                 sensitivityMethod,
                                                      timeIntegrationMethod,
-                                                     EMsolvers,DCsolver)
+                                                     EMsolvers,DCsolver,modUnits)
 
 MaxwellTimeParam{S,T,U}(Mesh::AbstractMesh,Sources::AbstractArray{S},Obs::AbstractArray{S},
 	                 ObsTimes::AbstractArray{S},t0::S,dt::Vector{S},wave::Vector{S},sourceType::Symbol,
 	                 storageLevel::Symbol,sensitivityMethod::Symbol,
 	                 timeIntegrationMethod::Symbol,EMsolvers::Vector{T},
-	                 DCsolver::U,K::SparseMatrixCSC) = MaxwellTimeParam{S,T,U}(
+	                 DCsolver::U,modUnits::Symbol,
+                     K::SparseMatrixCSC) = MaxwellTimeParam{S,T,U}(
 	                                                 Mesh,Sources,Obs,ObsTimes,t0,dt,wave,
 	                                                 sourceType,storageLevel,
 	                                                 sensitivityMethod,
                                                      timeIntegrationMethod,
-                                                     EMsolvers,DCsolver,K)
+                                                     EMsolvers,DCsolver,
+                                                     modUnits,K)
 
 # Supported options for categorical settings. See getMaxwellTimeParam
 # docstring below for documentation.
@@ -85,6 +89,7 @@ supportedSourceTypes        = [:InductiveDiscreteWire;
                                :InductiveLoopPotential; :Galvanic]
 supportedStorageLevels      = [:Factors; :Matrices; :None]
 supportedSensitivityMethods = [:Implicit; :Explicit]
+supportedModUnits           = [:con; :res]
 
 # Conditionally set default solver, depending on whether or not user
 # has MUMPS installed
@@ -171,13 +176,15 @@ function getMaxwellTimeParam{S<:Real}(Mesh::AbstractMesh,
 			                         sensitivityMethod::Symbol=:Implicit,
 			                         timeIntegrationMethod::Symbol=:BE,
 			                         EMsolverType::Symbol=defaultSolver,
-			                         DCsolverType::Symbol=defaultSolver)
+			                         DCsolverType::Symbol=defaultSolver,
+                                     modUnits::Symbol=:con)
 
     # Check that user has chosen valid settings for categorical options
     in(timeIntegrationMethod,supportedIntegrationMethods) || error("Unsupported integration method")
     in(sourceType,supportedSourceTypes) || error("Unsupported source type")
     in(storageLevel,supportedStorageLevels) || error("Unknown storageLevel selection")
     in(sensitivityMethod,supportedSensitivityMethods) || error("Invalid sensitivity method")
+    in(modUnits,supportedModUnits) || error("Invalid model unit selected")
 
     # Check consistency of dt and wave
     if length(wave) != (length(dt)+1)
@@ -230,12 +237,12 @@ function getMaxwellTimeParam{S<:Real}(Mesh::AbstractMesh,
         s = -0.5*K*s
         return MaxwellTimeParam(Mesh,s,Obs,ObsTimeMat,t0,dt,wave,sourceType,storageLevel,
                                 sensitivityMethod,timeIntegrationMethod,
-                                EMsolvers,DCsolver,K)
+                                EMsolvers,DCsolver,modUnits,K)
     else
         K = spzeros(0,0)
         return MaxwellTimeParam(Mesh,s,Obs,ObsTimeMat,t0,dt,wave,sourceType,storageLevel,
                                 sensitivityMethod,timeIntegrationMethod,
-                                EMsolvers,DCsolver,K)
+                                EMsolvers,DCsolver,modUnits,K)
     end
 end
 

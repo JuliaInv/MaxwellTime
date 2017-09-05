@@ -55,7 +55,7 @@ function getSensTMatVecBE{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
     # magnetic permeability
 
     # Unpack model into conductivity and magnetic permeability
-    sigma       = model.sigma
+    sigma = param.modUnits == :res ? 1./model.sigma : model.sigma
     mu          = model.mu
     invertSigma = model.invertSigma
     invertMu    = model.invertMu
@@ -73,6 +73,7 @@ function getSensTMatVecBE{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
     Msig   = getEdgeMassMatrix(Mesh,vec(sigma))
     Msig   = Ne'*Msig*Ne
     P      = Ne'*param.Obs
+    DrhoDsig = param.modUnits == :res ? spdiagm(-(sigma.^2)) : UniformScaling(1.0)
     if invertMu || (param.storageLevel == :None)
         Nf,Qf,    = getFaceConstraints(Mesh)
         Curl      = getCurlMatrix(Mesh)
@@ -139,7 +140,7 @@ function getSensTMatVecBE{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
         for j = 1:ns
             if invertSigma
                 A_mul_B!(Nelam,Ne,lam[:,j,1]) # Nelam = Ne*lam[:,j,1]
-                JTvSigma   .-= (1/dt[i])*dEdgeMassMatrixTrTimesVector(Mesh,sigma,Ne*(ew[:,j,i+1]-ew[:,j,i]),Nelam)
+                JTvSigma   .-= (1/dt[i])*DrhoDsig'*dEdgeMassMatrixTrTimesVector(Mesh,sigma,Ne*(ew[:,j,i+1]-ew[:,j,i]),Nelam)
             end
             if invertMu
                 curle      = Curl*ew[:,j,i+1]
@@ -174,7 +175,7 @@ function getSensTMatVecBE{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
         rhs      = pz0 - 1/dt[1]*G'*Msig*lam[:,:,2]
         lam0,DCsolver = solveDC!(A,rhs,DCsolver)
         for j = 1:ns
-            Gzi      = G'*Ne'*getdEdgeMassMatrix(Mesh,-Ne*ew[:,j,1])
+            Gzi      = G'*DrhoDsig*Ne'*getdEdgeMassMatrix(Mesh,-Ne*ew[:,j,1])
             JTvSigma = JTvSigma -Gzi'*lam0[:,j]
         end
         if param.storageLevel != :Factors
