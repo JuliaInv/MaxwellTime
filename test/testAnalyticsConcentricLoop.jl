@@ -28,16 +28,17 @@ Fx,Fy,Fz = getFaceGrids(M)
 nEx,nEy,nEz = getEdgeNumbering(M)
 rLoop = 13.5; areaLoop = pi*rLoop^2
 rModel = sqrt(1/pi); lModel = 1.0; lLoop = sqrt(areaLoop)
-Tx = [  h/2-lModel/2  h/2-lModel/2 h;
-        h/2-lModel/2  h/2+lModel/2 h;
-        h/2+lModel/2  h/2+lModel/2 h;
-        h/2+lModel/2  h/2-lModel/2 h;
-        h/2-lModel/2  h/2-lModel/2 h]
+txHeight = 0.0
+Tx = [  h/2-lModel/2  h/2-lModel/2 txHeight;
+        h/2-lModel/2  h/2+lModel/2 txHeight;
+        h/2+lModel/2  h/2+lModel/2 txHeight;
+        h/2+lModel/2  h/2-lModel/2 txHeight;
+        h/2-lModel/2  h/2-lModel/2 txHeight]
 
 
 
 MeS = getEdgeIntegralOfPolygonalChain(M,Tx)
-Aloop = 0.5*staticCurrentLoopVectorPotential(M,rModel,[h/2;h/2;0.0])
+Aloop = staticCurrentLoopVectorPotential(M,rModel,[h/2;h/2;txHeight])
 Ne,Qe, = getEdgeConstraints(M)
 Nf,Qf, = getFaceConstraints(M)
 C      = getCurlMatrix(M)
@@ -53,7 +54,7 @@ Rx = copy(Tx)
 # Rx[:,2] .+= 10
 P = getEdgeIntegralOfPolygonalChain(M,Rx,normalize=true)
 
-dt    = (1e-5)*ones(100)
+dt    = (5e-6)*ones(200)
 t     = cumsum(dt)
 t0    = 0.0
 wave  = zeros(length(dt)+1)
@@ -70,7 +71,7 @@ pForAnal   = getMaxwellTimeParam(M,Aloop,P,obsTimes,t0,dt,wave,sourceType;
 
 #Setup model
 Xc = getCellCenteredGrid(M)
-sigBg  = 1e-4
+sigBg  = 1e-2
 sigAir = 1e-8
 sigma  = sigBg*ones(M.nc)
 Iair   = find(Xc[:,3] .> 0.0)
@@ -85,8 +86,8 @@ using SpecialFunctions
 mu = pi*4e-7
 # hz = hzAnalyticCentLoop(a,obsTimes,sigBg)
 # bzAnal = mu*hz
-#dbzdt  = mu*VMDdhdtzCentLoop(a,obsTimes,sigBg)
-dbzdt  = (1/areaLoop)*mu*VMDdhdtzCentLoop(rLoop,obsTimes,sigBg)
+dbzdt  = mu*VMDdhdtzCentLoop(rModel,obsTimes,sigBg)
+#dbzdt  = (1/areaLoop)*mu*VMDdhdtzCentLoop(rLoop,obsTimes,sigBg)
 
 
 
