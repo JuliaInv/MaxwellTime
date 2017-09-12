@@ -4,7 +4,7 @@ export MaxwellTimeParam, getMaxwellTimeParam
 # Inner and outer constructors are required to allow instantiating the type with
 # last three fields left uninitialized. Use getMaxwellTimeParam function
 # for instantiation. It validates input and sets things to default values.
-type MaxwellTimeParam{S<:Real,T<:AbstractSolver,U<:AbstractSolver} <: ForwardProbType
+mutable struct MaxwellTimeParam{S<:Real,T<:AbstractSolver,U<:AbstractSolver} <: ForwardProbType
     Mesh::AbstractMesh
     Sources::AbstractArray{S}
     Obs::AbstractArray{S}
@@ -232,7 +232,7 @@ function getMaxwellTimeParam{S<:Real}(Mesh::AbstractMesh,
     # to observation times
     ObsTimeMat = getObsTimeMatrix(ObsTimes,t0,dt,size(Obs,2),size(s,2),sourceType)
 
-    if sourceType == :InductiveLoopPotential
+    if in(sourceType,[:InductiveLoopPotential,:InductiveDiscreteWire])
         K = getMaxwellCurlCurlMatrix(Mesh,fill(pi*4e-7,Mesh.nc))
         s = -0.5*K*s
         return MaxwellTimeParam(Mesh,s,Obs,ObsTimeMat,t0,dt,wave,sourceType,storageLevel,

@@ -7,6 +7,8 @@
 # 3) TRBDF-2 (timeIntegrationMethod=:TRBDF2)
 #    TRBDF-2 seems to be unstable. Only for experimentation.
 
+import JOcTree.MassMatrix
+
 function getFieldsBE{T,N}(K::SparseMatrixCSC{T,N},
                           Msig::SparseMatrixCSC{T,N},
                           s::AbstractArray{T},
@@ -315,12 +317,21 @@ end
 
 function getMaxwellCurlCurlMatrix(M::AbstractMesh,mu)
     Curl   = getCurlMatrix(M)
+    ftype  = eltype(Curl)
+    itype  = eltype(Curl.colptr)
     Mmu    = getFaceMassMatrix(M,1./mu)
     Nf,Qf, = getFaceConstraints(M)
     Ne,    = getEdgeConstraints(M)
     Curl   = Qf*Curl*Ne
     Mmu    = Nf'*Mmu*Nf
     K      = Curl'*Mmu*Curl
+    M.Curl = spzeros(ftype,itype,0,0)
+    M.Nf   = spzeros(ftype,itype,0,0)
+    M.Qf   = spzeros(ftype,itype,0,0)
+    M.activeFaces = zeros(itype,0)
+    #sM.Qe   = spzeros(ftype,itype,0,0)
+    M.activeEdges = zeros(itype,0)
+    M.Pf   = Dict{Int64,MassMatrix}()
     return K
 end
 

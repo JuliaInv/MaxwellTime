@@ -57,13 +57,11 @@ function getSensMatVec(DsigDmz::MaxwellTimeModel,model::MaxwellTimeModel,
         end
         mod = model.invertSigma ? model.sigma : model.mu
         if isempty(param.Sens)
-            nt = length(param.dt)
-            ns = size(param.Sources,2)
-            nr = size(param.Obs,2)
-            J  = zeros(size(param.ObsTimes,1), length(mod))
+            ndata     = size(param.ObsTimes,1)
+            J         = zeros(ndata, length(mod))
             sensTFunc = sensitivityTFunctions[param.timeIntegrationMethod]
             for k=1:size(J,1)
-            	v        = zeros(size(param.ObsTimes,1))
+            	v        = zeros(ndata)
             	v[k]     = 1.0
             	JTvStruc = sensTFunc(v,model,param)
             	JTv      = model.invertSigma ? JTvStruc.sigma : JTvStruc.mu
