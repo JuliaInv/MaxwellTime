@@ -19,10 +19,11 @@ function getSensTMatVec{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
         mod = model.invertSigma ? model.sigma : model.mu
         if isempty(param.Sens)
             ndata     = size(param.ObsTimes,1)
-            J         = zeros(ndata, length(mod))
+            J         = Array{Float64}(ndata, length(mod))
             sensTFunc = sensitivityTFunctions[param.timeIntegrationMethod]
-            for k=1:size(J,1)
-            	v        = zeros(ndata)
+            v = Array{Float64}(ndata)
+            for k=1:ndata
+            	fill!(v, 0.0)
             	v[k]     = 1.0
             	JTvStruc = sensTFunc(v,model,param)
             	JTv      = model.invertSigma ? JTvStruc.sigma : JTvStruc.mu
@@ -30,9 +31,21 @@ function getSensTMatVec{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
             end
             param.Sens = J
             param.fields=[]
-	end
-	JTz = param.Sens'*z
-	return MaxwellTimeModel(JTz,JTz,model.invertSigma,model.invertMu)
+
+            # Clear all factorizations.
+            EMsolvers = param.EMsolvers
+            DCsolver = param.DCsolver
+            for solver in EMsolvers
+              clear!(solver)
+              solver.doClear = 1
+            end
+            clear!(DCsolver)
+            DCsolver.doClear = 1
+            gc()
+
+        end
+	     JTz = param.Sens'*z
+	     return MaxwellTimeModel(JTz,JTz,model.invertSigma,model.invertMu)
     else # Implicit sensitivities
         # Dispatch based on forward modelling integration method,
         # e.g. BE vs BDF2
@@ -94,7 +107,7 @@ function getSensTMatVecBE{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
     ne  = size(ew,1)
     nt  = length(dt)
     nr  = size(P,2)
-    lam = zeros(T,ne,ns,2)
+    lam = zeros(T,ne,ns) # only one lam is needed
 
     # Multiply by transpose of time interpolation matrix
     # To map from data space to data at all times space
@@ -104,16 +117,16 @@ function getSensTMatVecBE{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
     groundedSource = param.sourceType == :Galvanic ? true : false
     if groundedSource
         ptz  = reshape(ptz,nr,ns,nt+1)
-        pz   = zeros(T,ne,ns,nt)
-        for j=1:nt
-            pz[:,:,j] = P*ptz[:,:,j+1]
-        end
+#        pz   = zeros(T,ne,ns,nt)
+#        for j=1:nt
+#            pz[:,:,j] = P*ptz[:,:,j+1]
+#        end
     else
         ptz  = reshape(ptz,nr,ns,nt)
-        pz   = zeros(T,ne,ns,nt)
-        for j=1:nt
-            pz[:,:,j] = P*ptz[:,:,j]
-        end
+#        pz   = zeros(T,ne,ns,nt)
+#        for j=1:nt
+#            pz[:,:,j] = P*ptz[:,:,j]
+#        end
     end
 
     JTvSigma    = zeros(T,length(sigma))
@@ -124,37 +137,44 @@ function getSensTMatVecBE{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
     iSolver     = 0
     dtLast      = -1.0 # Size of last time step, used to check if
                       # factorization of Forward mod. matrix is needed.
-    Nelam       = zeros(T,size(Ne,1))
-    GzitNelam   = zeros(T,Mesh.nc)
+    Nelam       = Array{T}(size(Ne,1))
+   # GzitNelam   = zeros(T,Mesh.nc)
+    dfields = Array{Float64}(size(Ne,1))
+    
     for i=length(dt)-1:-1:1
         if dt[i] != dtLast
             A,iSolver = getBEMatrix!(dt[i],A,K,Msig,param,uniqueSteps)
         end
 
-        rhs = pz[:,:,i] + 1/dt[i+1]*Msig*lam[:,:,2]
-        lam[:,:,1],EMsolvers[iSolver] = solveMaxTimeBE!(A,rhs,Msig,Mesh,dt,i,storageLevel,
-                                                         EMsolvers[iSolver])
+        ij = groundedSource ? i+1 : i
+       # rhs = pz[:,:,i] + 1/dt[i+1]*Msig*lam[:,:,2]
+        rhs = P*ptz[:,:,ij] + (1/dt[i+1])*Msig*lam
+
+        
+        lam, EMsolvers[iSolver] = solveMaxTimeBE!(A,rhs,Msig,Mesh,dt,i,storageLevel,
+                                                  EMsolvers[iSolver])
 
         for j = 1:ns
             if invertSigma
-                A_mul_B!(Nelam,Ne,lam[:,j,1]) # Nelam = Ne*lam[:,j,1]
-                JTvSigma   .-= (1/dt[i])*DrhoDsig'*dEdgeMassMatrixTrTimesVector(Mesh,sigma,Ne*(ew[:,j,i+1]-ew[:,j,i]),Nelam)
+                A_mul_B!(Nelam,Ne,lam[:,j]) # Nelam = Ne*lam[:,j]
+                A_mul_B!(dfields, Ne, ew[:,j,i+1]-ew[:,j,i])  # dfields = Ne*(ew[:,j,i+1]-ew[:,j,i])
+                JTvSigma .-= (1/dt[i])*(DrhoDsig'*dEdgeMassMatrixTrTimesVector(Mesh,sigma, dfields, Nelam))
             end
             if invertMu
                 curle      = Curl*ew[:,j,i+1]
                 Gzi        = getdFaceMassMatrix(Mesh,mu,Nf*curle)*DmuinvDmu
-                A_mul_B!(curllam,Curl,lam[:,j,1]) #curllam = Curl*lam[:,j,1]
+                A_mul_B!(curllam,Curl,lam[:,j]) #curllam = Curl*lam[:,j]
                 A_mul_B!(nfcurllam,Nf,curllam) #nfcurllam  = Nf*curllam
                 At_mul_B!(Gzitnfcurllam,Gzi,nfcurllam)
                 JTvMu      .-= Gzitnfcurllam
             end
         end
-        lam[:,:,2] = lam[:,:,1]
+       # lam[:,:,2] = lam[:,:,1]
         dtLast = dt[i]
-    end
+    end  # i
     if storageLevel != :Factors
         for solver in EMsolvers
-          clear!(EMsolver)
+          clear!(solver)
           solver.doClear = 1
         end
     end
@@ -170,11 +190,11 @@ function getSensTMatVecBE{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
         G        = Qe*Gin*Nn
         A        = getDCmatrix(Msig,G,param) # Forms matrix only if needed
         pz0      = -G'*P*ptz[:,:,1]
-        rhs      = pz0 - 1/dt[1]*G'*Msig*lam[:,:,2]
+        rhs      = pz0 - (1/dt[1])*G'*(Msig*lam)
         lam0,DCsolver = solveDC!(A,rhs,DCsolver)
         for j = 1:ns
             Gzi      = G'*DrhoDsig*Ne'*getdEdgeMassMatrix(Mesh,sigma,-Ne*ew[:,j,1])
-            JTvSigma = JTvSigma -Gzi'*lam0[:,j]
+            JTvSigma .-= Gzi'*lam0[:,j]
         end
         if param.storageLevel != :Factors
             clear!(DCsolver)

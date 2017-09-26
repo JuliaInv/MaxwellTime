@@ -82,7 +82,14 @@ function getData(model::MaxwellTimeModel,param::MaxwellTimeParam,doClear::Bool=f
     ne            = size(Ne,2) #Number of active edges
     ns            = size(s,2)
     nt            = length(dt)+1
-    param.fields  = zeros(eltype(s),ne,ns,nt)
+    
+    
+    if !isdefined(param,:fields) || size(param.fields) != (ne,ns,nt)
+       param.fields  = zeros(Float64,ne,ns,nt)
+    else
+       fill!(param.fields, 0.0)
+    end
+    
     e             = param.fields
 
     # Initialize matrix storage if needed. Note that if a direct solver is
@@ -134,3 +141,4 @@ function getData(model::MaxwellTimeModel,param::MaxwellTimeParam,doClear::Bool=f
 
     return D, param
 end
+

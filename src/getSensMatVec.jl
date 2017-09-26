@@ -57,11 +57,13 @@ function getSensMatVec(DsigDmz::MaxwellTimeModel,model::MaxwellTimeModel,
         end
         mod = model.invertSigma ? model.sigma : model.mu
         if isempty(param.Sens)
+           #  error("Why are we here?")
             ndata     = size(param.ObsTimes,1)
             J         = zeros(ndata, length(mod))
             sensTFunc = sensitivityTFunctions[param.timeIntegrationMethod]
-            for k=1:size(J,1)
-            	v        = zeros(ndata)
+            v = Array{Float64}(ndata)
+            for k=1:ndata
+            	fill!(v, 0.0)
             	v[k]     = 1.0
             	JTvStruc = sensTFunc(v,model,param)
             	JTv      = model.invertSigma ? JTvStruc.sigma : JTvStruc.mu
@@ -69,9 +71,21 @@ function getSensMatVec(DsigDmz::MaxwellTimeModel,model::MaxwellTimeModel,
             end
             param.Sens = J
             param.fields=[]
-	end
-	z = model.invertSigma ? zsig : zmu
-	return param.Sens*z
+
+            # Clear all factorizations.
+            EMsolvers = param.EMsolvers
+            DCsolver = param.DCsolver
+            for solver in EMsolvers
+              clear!(solver)
+              solver.doClear = 1
+            end
+            clear!(DCsolver)
+            DCsolver.doClear = 1
+            gc()
+            
+         end
+         z = model.invertSigma ? zsig : zmu
+         return param.Sens*z
     else # Implicit sensitivities
         # Dispatch based on forward modelling integration method,
         # e.g. BE vs BDF2
@@ -142,7 +156,8 @@ function getSensMatVecBE{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
     ns = size(s,2)
     ne = size(ew,1)
     nt = length(dt)
-    lam = zeros(T,ne,ns,2)
+    lam = zeros(T,ne,ns)  # only one lam is needed
+
     Jv  = zeros(T,size(P,2),ns,nt)
 
     #Do the DC part of dCdm if source is grounded and we're inverting for sigma.
@@ -163,11 +178,11 @@ function getSensMatVecBE{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
             rhs[:,j] = Gzi*DrhoDsig*DsigDmz
         end
         lam0,DCsolver = solveDC!(A,rhs,DCsolver)
-        lam[:,:,1]    = -G*lam0 #Taking gradient of lam0
-                                #Prepares for data projection and
-                                #preps lam for use as rhs in first
-                                #time-step
-        Jvdc          = -P'*lam[:,:,1]
+        lam    = -G*lam0 #Taking gradient of lam0
+                         #Prepares for data projection and
+                         #preps lam for use as rhs in first
+                         #time-step
+        Jvdc          = -P'*lam
         DCsolver.doClear = 0
         if param.storageLevel != :Factors
             clear!(DCsolver)
@@ -190,7 +205,7 @@ function getSensMatVecBE{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
         if ( (i==1) || (dt[i] != dt[i-1]) )
             A,iSolver = getBEMatrix!(dt[i],A,K,Msig,param,uniqueSteps)
         end
-        rhs = 1/dt[i]*Msig*lam[:,:,1]
+        rhs = (1/dt[i])*(Msig*lam)
         if invertSigma
             addDCDsigmaBE!(Mesh,sigma,Ne,ew[:,:,i:i+1],dt[i],DrhoDsig*DsigDmz,ns,rhs)
         end
@@ -198,12 +213,12 @@ function getSensMatVecBE{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
             addDCDmuBE!(Mesh,mu,Nf,Curl,ew[:,:,i+1],DmuinvDmu*DmuDmz,ns,rhs)
         end
 
-        lam[:,:,2],EMsolvers[iSolver] = solveMaxTimeBE!(A,rhs,Msig,Mesh,dt,i,
+        lam,EMsolvers[iSolver] = solveMaxTimeBE!(A,rhs,Msig,Mesh,dt,i,
                                          storageLevel,EMsolvers[iSolver])
 
         # compute Jv
-        Jv[:,:,i]  = -P'*(lam[:,:,2])
-        lam[:,:,1] = lam[:,:,2]
+        Jv[:,:,i]  = -P'*lam
+       # lam[:,:,1] = lam[:,:,2]
     end
     if storageLevel != :Factors
         for solver in EMsolvers

@@ -36,7 +36,7 @@ function getFieldsBE{T,N}(K::SparseMatrixCSC{T,N},
 
     # Do the time-stepping
     iSolver = 0
-    uniqueSteps = Vector{eltype(ew)}()
+    uniqueSteps = Vector{eltype(dt)}()
     A           = spzeros(T,0,0)
     for i=1:length(dt)
         dtinv = 1.0/dt[i]
@@ -332,6 +332,12 @@ function getMaxwellCurlCurlMatrix(M::AbstractMesh,mu)
     #sM.Qe   = spzeros(ftype,itype,0,0)
     M.activeEdges = zeros(itype,0)
     M.Pf   = Dict{Int64,MassMatrix}()
+    
+    clear!(M.FX) ; clear!(M.FY) ; clear!(M.FZ)
+    clear!(M.EX) ; clear!(M.EY) ; clear!(M.EZ)
+    clear!(M.NFX) ; clear!(M.NFY) ; clear!(M.NFZ)
+    clear!(M.NEX) ; clear!(M.NEY) ; clear!(M.NEZ)
+    
     return K
 end
 

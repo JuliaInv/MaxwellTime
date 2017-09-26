@@ -21,7 +21,7 @@ mutable struct MaxwellTimeParam{S<:Real,T<:AbstractSolver,U<:AbstractSolver} <: 
     modUnits::Symbol
     K::SparseMatrixCSC
     Matrices::Vector{SparseMatrixCSC}
-    fields::Array{S}
+    fields::Array{Float64}
     Sens::Array{S}
     cgTol::S  #Only used by BDF2. Tolerance for cg solves used when stepsize changes
     AuxFields::Array{S} # Stores extra electric fields outside
@@ -228,11 +228,21 @@ function getMaxwellTimeParam{S<:Real}(Mesh::AbstractMesh,
     Ne,Qe, = getEdgeConstraints(Mesh)
     s      = Ne'*Sources
 
+    # Get rid of late times that are greater than observed.
+    maxobstime = maximum(ObsTimes)
+    timevalues = t0 + cumsum(dt)
+    maxidx = searchsortedfirst(timevalues, maxobstime) + 1
+    deleteat!(wave, maxidx+1:length(wave))
+    deleteat!(dt, maxidx:length(dt))
+
+        
     # ObsTimeMat interpolates observations from step times
     # to observation times
     ObsTimeMat = getObsTimeMatrix(ObsTimes,t0,dt,size(Obs,2),size(s,2),sourceType)
 
     if in(sourceType,[:InductiveLoopPotential,:InductiveDiscreteWire])
+ #   if sourceType == :InductiveLoopPotential
+
         K = getMaxwellCurlCurlMatrix(Mesh,fill(pi*4e-7,Mesh.nc))
         s = -0.5*K*s
         return MaxwellTimeParam(Mesh,s,Obs,ObsTimeMat,t0,dt,wave,sourceType,storageLevel,
@@ -255,6 +265,7 @@ function getObsTimeMatrix{S<:Real}(ObsTimes::Vector{S},t0::S,dt::Vector{S},
     mat = spzeros(S,nt*nr*ns,length(t)*nr*ns)
     for i in 1:nt
         obsIdx = searchsortedfirst(t,ObsTimes[i])
+        if obsIdx > length(t) ; error("obsIdx > length(t)") ; end
         if obsIdx == 1
             interpWeights[i] = 1
             mat[1:nr*ns,1:nr*ns] = speye(nr*ns)
