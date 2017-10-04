@@ -235,25 +235,20 @@ function getMaxwellTimeParam{S<:Real}(Mesh::AbstractMesh,
     deleteat!(wave, maxidx+1:length(wave))
     deleteat!(dt, maxidx:length(dt))
 
-        
+
     # ObsTimeMat interpolates observations from step times
     # to observation times
     ObsTimeMat = getObsTimeMatrix(ObsTimes,t0,dt,size(Obs,2),size(s,2),sourceType)
 
-    if in(sourceType,[:InductiveLoopPotential,:InductiveDiscreteWire])
- #   if sourceType == :InductiveLoopPotential
+    K = getMaxwellCurlCurlMatrix(Mesh,fill(pi*4e-7,Mesh.nc))
 
-        K = getMaxwellCurlCurlMatrix(Mesh,fill(pi*4e-7,Mesh.nc))
+    if sourceType == :InductiveLoopPotential
         s = -0.5*K*s
-        return MaxwellTimeParam(Mesh,s,Obs,ObsTimeMat,t0,dt,wave,sourceType,storageLevel,
-                                sensitivityMethod,timeIntegrationMethod,
-                                EMsolvers,DCsolver,modUnits,K)
-    else
-        K = spzeros(0,0)
-        return MaxwellTimeParam(Mesh,s,Obs,ObsTimeMat,t0,dt,wave,sourceType,storageLevel,
-                                sensitivityMethod,timeIntegrationMethod,
-                                EMsolvers,DCsolver,modUnits,K)
     end
+
+    return MaxwellTimeParam(Mesh,s,Obs,ObsTimeMat,t0,dt,wave,sourceType,storageLevel,
+                            sensitivityMethod,timeIntegrationMethod,
+                            EMsolvers,DCsolver,modUnits,K)
 end
 
 function getObsTimeMatrix{S<:Real}(ObsTimes::Vector{S},t0::S,dt::Vector{S},
