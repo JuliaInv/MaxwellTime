@@ -61,7 +61,7 @@ nt       = 6
 #dt       = dt0*cumprod([1.0;1.25*ones(nt-1)])
 dt       = dt0*cumprod([1.0;1.25*ones(nt-1)])
 t        = cumsum(dt)
-obsTimes = copy(dt)
+obsTimes = copy(t)
 wave     = zeros(length(dt)+1); wave[1] = 1.0
 
 sigma   = zeros(M.nc)+1e-2

@@ -34,6 +34,10 @@ import jInv.InverseSolve.AbstractModel
 # Import MatrixOrScaling typealias
 import jInv.ForwardShare.MatrixOrScaling
 
+# Import speye method from JOcTree that allows full control over the
+# floating point and integer types used in a sparse identity matrix
+import JOcTree.speye
+
 # Define MaxwellTime forward problem param type and associated setup functions
 include("MaxwellTimeParam.jl")
 

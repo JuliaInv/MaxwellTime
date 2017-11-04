@@ -7,6 +7,8 @@
 # 3) TRBDF-2 (timeIntegrationMethod=:TRBDF2)
 #    TRBDF-2 seems to be unstable. Only for experimentation.
 
+import JOcTree.MassMatrix
+
 function getFieldsBE{T,N}(K::SparseMatrixCSC{T,N},
                           Msig::SparseMatrixCSC{T,N},
                           s::AbstractArray{T},
@@ -34,14 +36,15 @@ function getFieldsBE{T,N}(K::SparseMatrixCSC{T,N},
 
     # Do the time-stepping
     iSolver = 0
-    uniqueSteps = Vector{eltype(ew)}()
-    A           = spzeros(T,0,0)
+    uniqueSteps = Vector{eltype(dt)}()
+    A           = spzeros(T,N,0,0)
     for i=1:length(dt)
         dtinv = 1.0/dt[i]
         rhs = dtinv*(Msig*ew[:,:,i]+(wave[i]-wave[i+1])*s)
         # Matrix only changes when the step-size changes
         if ( (i==1) || (dt[i] != dt[i-1]) )
             A,iSolver = getBEMatrix!(dt[i],A,K,Msig,param,uniqueSteps)
+            #println("Matrix for new factorization is $(typeof(A))")
         end
         # Solve the e-field update system. Msig and M left as inputs
         # in case iterative solver is used in the future. Currently, this code
@@ -85,7 +88,7 @@ function getFieldsBDF2{T,N}(K::SparseMatrixCSC{T,N},
       solver.doClear = 1
     end
     uniqueSteps          = Vector{T}()
-    A                    = spzeros(T,0,0)
+    A                    = spzeros(T,N,0,0)
     A,iSolver            = getBDF2ConstDTmatrix!(dt[1],A,K,Msig,param,uniqueSteps)
     rhs                  = 3/(2*dt[1])*( Msig*ew[:,:,1] + (wave[1]-wave[2])*s )
     ehat,EMsolvers[1]    = solveMaxTimeBDF2ConstDT!(A,rhs,Msig,Mesh,2/(3*dt[1]),EMsolvers[1])
@@ -315,12 +318,25 @@ end
 
 function getMaxwellCurlCurlMatrix(M::AbstractMesh,mu)
     Curl   = getCurlMatrix(M)
-    Mmu    = getFaceMassMatrix(M,1./mu)
+    Tf     = eltype(Curl)
+    Tn     = eltype(Curl.colptr)
+    Tn2    = eltype(M.S.SV.nzind)
+    Mmu    = getFaceMassMatrix(M,one(Tf)./mu)
     Nf,Qf, = getFaceConstraints(M)
     Ne,    = getEdgeConstraints(M)
     Curl   = Qf*Curl*Ne
     Mmu    = Nf'*Mmu*Nf
     K      = Curl'*Mmu*Curl
+    #println("get func says type is $(typeof(K))")
+    # Clear temporary arrays we don't need anymore
+    M.Curl = spzeros(Tf,Tn,0,0)
+    M.Nf   = spzeros(Tf,Tn,0,0)
+    M.Qf   = spzeros(Tf,Tn,0,0)
+    M.activeFaces = Tn[]
+    #sM.Qe   = spzeros(ftype,itype,0,0)
+    M.activeEdges = Tn[]
+    M.Pf   = Dict{Int64,MassMatrix{Tf,Tn}}()
+
     return K
 end
 
