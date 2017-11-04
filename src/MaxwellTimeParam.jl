@@ -4,27 +4,27 @@ export MaxwellTimeParam, getMaxwellTimeParam
 # Inner and outer constructors are required to allow instantiating the type with
 # last three fields left uninitialized. Use getMaxwellTimeParam function
 # for instantiation. It validates input and sets things to default values.
-mutable struct MaxwellTimeParam{S<:Real,T<:AbstractSolver,U<:AbstractSolver} <: ForwardProbType
+mutable struct MaxwellTimeParam{Tf<:Real,Tn<:Integer,TSem<:AbstractSolver,TSdc<:AbstractSolver} <: ForwardProbType
     Mesh::AbstractMesh
-    Sources::AbstractArray{S}
-    Obs::AbstractArray{S}
-    ObsTimes::AbstractArray{S}
-    t0::S
-    dt::Vector{S}
-    wave::Vector{S}
+    Sources::AbstractArray{Tf}
+    Obs::AbstractArray{Tf}
+    ObsTimes::AbstractArray{Tf}
+    t0::Tf
+    dt::Vector{Tf}
+    wave::Vector{Tf}
     sourceType::Symbol
     storageLevel::Symbol
     sensitivityMethod::Symbol
     timeIntegrationMethod::Symbol
-    EMsolvers::Vector{T}
-    DCsolver::U
+    EMsolvers::Vector{TSem}
+    DCsolver::TSdc
     modUnits::Symbol
-    K::SparseMatrixCSC
+    K::SparseMatrixCSC{Tf,Tn}
     Matrices::Vector{SparseMatrixCSC}
     fields::Array{Float64}
-    Sens::Array{S}
-    cgTol::S  #Only used by BDF2. Tolerance for cg solves used when stepsize changes
-    AuxFields::Array{S} # Stores extra electric fields outside
+    Sens::Array{Tf}
+    cgTol::Tf  #Only used by BDF2. Tolerance for cg solves used when stepsize changes
+    AuxFields::Array{Tf} # Stores extra electric fields outside
                         # of regular time-stepping. Currently used
                         # to initialize BDF2 time stepping without additional BE
                         # factorization. Needs to be stored for use in sensitivity
@@ -33,23 +33,23 @@ mutable struct MaxwellTimeParam{S<:Real,T<:AbstractSolver,U<:AbstractSolver} <: 
     # Use custom constructors to allow creation of objects with
     # Matrices, fields, explicit sensitivity matrix, and possibly K
     # left uninitialized
-    MaxwellTimeParam{S,T,U}(Mesh::AbstractMesh,Sources::AbstractArray{S},Obs::AbstractArray{S},
-                     ObsTimes::AbstractArray{S},t0::S,dt::Vector{S},wave::Vector{S},sourceType::Symbol,
-                     storageLevel::Symbol,sensitivityMethod::Symbol,
-                     timeIntegrationMethod::Symbol,EMsolvers::Vector{T},
-                     DCsolver::U,
-                     modUnits::Symbol) where {S<:Real,T<:AbstractSolver,U<:AbstractSolver} = new(
-                                        Mesh,Sources,Obs,ObsTimes,t0,dt,wave,sourceType,
-                                        storageLevel,sensitivityMethod,
-                                        timeIntegrationMethod,
-                                        EMsolvers,DCsolver,modUnits)
+    # MaxwellTimeParam{Tf,TSem,TSdc}(Mesh::AbstractMesh,Sources::AbstractArray{Tf},Obs::AbstractArray{Tf},
+    #                  ObsTimes::AbstractArray{Tf},t0::Tf,dt::Vector{Tf},wave::Vector{Tf},sourceType::Symbol,
+    #                  storageLevel::Symbol,sensitivityMethod::Symbol,
+    #                  timeIntegrationMethod::Symbol,EMsolvers::Vector{TSem},
+    #                  DCsolver::TSdc,
+    #                  modUnits::Symbol) where {Tf<:Real,TSem<:AbstractSolver,TSdc<:AbstractSolver} = new(
+    #                                     Mesh,Sources,Obs,ObsTimes,t0,dt,wave,sourceType,
+    #                                     storageLevel,sensitivityMethod,
+    #                                     timeIntegrationMethod,
+    #                                     EMsolvers,DCsolver,modUnits)
 
-    MaxwellTimeParam{S,T,U}(Mesh::AbstractMesh,Sources::AbstractArray{S},Obs::AbstractArray{S},
-                     ObsTimes::AbstractArray{S},t0::S,dt::Vector{S},wave::Vector{S},sourceType::Symbol,
+    MaxwellTimeParam{Tf,Tn,TSem,TSdc}(Mesh::AbstractMesh,Sources::AbstractArray{Tf},Obs::AbstractArray{Tf},
+                     ObsTimes::AbstractArray{Tf},t0::Tf,dt::Vector{Tf},wave::Vector{Tf},sourceType::Symbol,
                      storageLevel::Symbol,sensitivityMethod::Symbol,
-                     timeIntegrationMethod::Symbol,EMsolvers::Vector{T},
-                     DCsolver::U,modUnits::Symbol,K::SparseMatrixCSC) where
-                     {S<:Real,T<:AbstractSolver,U<:AbstractSolver} = new(
+                     timeIntegrationMethod::Symbol,EMsolvers::Vector{TSem},
+                     DCsolver::TSdc,modUnits::Symbol,K::SparseMatrixCSC{Tf,Tn}) where
+                     {Tf<:Real,Tn<:Integer,TSem<:AbstractSolver,TSdc<:AbstractSolver} = new(
                                      Mesh,Sources,Obs,ObsTimes,t0,dt,wave,
                                      sourceType,storageLevel,sensitivityMethod,
                                      timeIntegrationMethod,
@@ -57,24 +57,24 @@ mutable struct MaxwellTimeParam{S<:Real,T<:AbstractSolver,U<:AbstractSolver} <: 
 end
 
 # Unfortunately parametric types need these matching outer and inner constructors
-MaxwellTimeParam{S,T,U}(Mesh::AbstractMesh,Sources::AbstractArray{S},Obs::AbstractArray{S},
-	                 ObsTimes::AbstractArray{S},t0::S,dt::Vector{S},wave::Vector{S},sourceType::Symbol,
-	                 storageLevel::Symbol,sensitivityMethod::Symbol,
-	                 timeIntegrationMethod::Symbol,EMsolvers::Vector{T},
-	                 DCsolver::U,modUnits::Symbol) = MaxwellTimeParam{S,T,U}(
-	                                                 Mesh,Sources,Obs,ObsTimes,
-                                                     t0,dt,wave,
-	                                                 sourceType,storageLevel,
-	                                                 sensitivityMethod,
-                                                     timeIntegrationMethod,
-                                                     EMsolvers,DCsolver,modUnits)
+# MaxwellTimeParam{Tf,TSem,TSdc}(Mesh::AbstractMesh,Sources::AbstractArray{Tf},Obs::AbstractArray{Tf},
+# 	                 ObsTimes::AbstractArray{Tf},t0::Tf,dt::Vector{Tf},wave::Vector{Tf},sourceType::Symbol,
+# 	                 storageLevel::Symbol,sensitivityMethod::Symbol,
+# 	                 timeIntegrationMethod::Symbol,EMsolvers::Vector{TSem},
+# 	                 DCsolver::TSdc,modUnits::Symbol) = MaxwellTimeParam{Tf,TSem,TSdc}(
+# 	                                                 Mesh,Sources,Obs,ObsTimes,
+#                                                      t0,dt,wave,
+# 	                                                 sourceType,storageLevel,
+# 	                                                 sensitivityMethod,
+#                                                      timeIntegrationMethod,
+#                                                      EMsolvers,DCsolver,modUnits)
 
-MaxwellTimeParam{S,T,U}(Mesh::AbstractMesh,Sources::AbstractArray{S},Obs::AbstractArray{S},
-	                 ObsTimes::AbstractArray{S},t0::S,dt::Vector{S},wave::Vector{S},sourceType::Symbol,
+MaxwellTimeParam{Tf,Tn,TSem,TSdc}(Mesh::AbstractMesh,Sources::AbstractArray{Tf},Obs::AbstractArray{Tf},
+	                 ObsTimes::AbstractArray{Tf},t0::Tf,dt::Vector{Tf},wave::Vector{Tf},sourceType::Symbol,
 	                 storageLevel::Symbol,sensitivityMethod::Symbol,
-	                 timeIntegrationMethod::Symbol,EMsolvers::Vector{T},
-	                 DCsolver::U,modUnits::Symbol,
-                     K::SparseMatrixCSC) = MaxwellTimeParam{S,T,U}(
+	                 timeIntegrationMethod::Symbol,EMsolvers::Vector{TSem},
+	                 DCsolver::TSdc,modUnits::Symbol,
+                     K::SparseMatrixCSC{Tf,Tn}) = MaxwellTimeParam{Tf,Tn,TSem,TSdc}(
 	                                                 Mesh,Sources,Obs,ObsTimes,t0,dt,wave,
 	                                                 sourceType,storageLevel,
 	                                                 sensitivityMethod,
@@ -94,7 +94,7 @@ supportedModUnits           = [:con; :res]
 # Conditionally set default solver, depending on whether or not user
 # has MUMPS installed
 defaultSolver = hasMUMPS ? :MUMPS : :juliaSolver
-
+#defaultSolver = :Pardiso
 """
 function param = getMaxwellTimeParam(Mesh,Sources,Obs,ObsTimes,dt,
                                      wave,sourceType;kwargs)
@@ -195,7 +195,7 @@ function getMaxwellTimeParam{S<:Real}(Mesh::AbstractMesh,
     if DCsolverType == :MUMPS
         DCsolver = hasMUMPS ? getMUMPSsolver([],1,0,1) : error("Unable to load MUMPS")
     elseif DCsolverType ==:Pardiso
-        DCsolver = getjInvPardisoSolver([],1,0,2,1) : error("Unable to load Pardiso")
+        DCsolver = hasPardiso ? getjInvPardisoSolver([],1,0,2,1) : error("Unable to load Pardiso")
         warn("DC problem can be unstable w Pardiso for large problems")
     elseif DCsolverType == :juliaSolver
         DCsolver = getJuliaSolver(sym=1)
@@ -241,6 +241,16 @@ function getMaxwellTimeParam{S<:Real}(Mesh::AbstractMesh,
     ObsTimeMat = getObsTimeMatrix(ObsTimes,t0,dt,size(Obs,2),size(s,2),sourceType)
 
     K = getMaxwellCurlCurlMatrix(Mesh,fill(pi*4e-7,Mesh.nc))
+    #println("Is returned to getParam as type $(typeof(K))")
+
+    if sourceType != :Galvanic
+        clear!(Mesh.FX) ; clear!(Mesh.FY) ; clear!(Mesh.FZ)
+        clear!(Mesh.EX) ; clear!(Mesh.EY) ; clear!(Mesh.EZ)
+        clear!(Mesh.NFX); clear!(Mesh.NFY); clear!(Mesh.NFZ)
+        clear!(Mesh.NEX); clear!(Mesh.NEY); clear!(Mesh.NEZ)
+        clear!(Mesh.NN)
+    end
+    clear!(Mesh.NC)
 
     if sourceType == :InductiveLoopPotential
         s = -0.5*K*s

@@ -2,7 +2,7 @@ export getSensMatVec,interpGlobalToLocal
 
 
 # For backward compatibility
-function getSensMatVec{T<:Real}(z::Vector{T},sigma::Vector{T},
+function getSensMatVec{Tf<:Real}(z::Vector{Tf},sigma::Vector{Tf},
                        param::MaxwellTimeParam)
     zm = MaxwellTimeModel(z,[one(eltype(z))])
     m  = MaxwellTimeModel(sigma,fill(convert(eltype(sigma),4*pi*1e-7),
@@ -82,7 +82,7 @@ function getSensMatVec(DsigDmz::MaxwellTimeModel,model::MaxwellTimeModel,
             clear!(DCsolver)
             DCsolver.doClear = 1
             gc()
-            
+
          end
          z = model.invertSigma ? zsig : zmu
          return param.Sens*z
@@ -97,7 +97,7 @@ function getSensMatVec(DsigDmz::MaxwellTimeModel,model::MaxwellTimeModel,
 end
 
 
-function getSensMatVecBE{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
+function getSensMatVecBE{Tf<:Real}(DsigDmz::Vector{Tf},DmuDmz::Vector{Tf},
                                   model::MaxwellTimeModel,param::MaxwellTimeParam)
 
     # getSensMatVecBE(z,sigma,param)
@@ -129,11 +129,12 @@ function getSensMatVecBE{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
     s             = param.Sources
 
     # Get matrices
+    Tn       = typeof(param.Mesh.nc)
     Ne,Qe,   = getEdgeConstraints(Mesh)
     Msig     = getEdgeMassMatrix(Mesh,vec(sigma))
     Msig     = Ne'*Msig*Ne
     P        = Ne'*param.Obs
-    DrhoDsig = param.modUnits == :res ? spdiagm(-(sigma.^2)) : UniformScaling(1.0)
+    DrhoDsig = param.modUnits == :res ? spdiagm(-(sigma.^2)) : UniformScaling(one(Tf))
     if invertMu || (param.storageLevel == :None)
         Nf,Qf,    = getFaceConstraints(Mesh)
         Curl      = getCurlMatrix(Mesh)
@@ -145,7 +146,7 @@ function getSensMatVecBE{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
     if param.storageLevel == :None
         K = getMaxwellCurlCurlMatrix!(param,model)
     else
-        K = spzeros(T,0,0)
+        K = spzeros(Tf,Tn,0,0)
     end
 
     if invertMu & (length(mu)>3*Mesh.nc)
@@ -156,9 +157,9 @@ function getSensMatVecBE{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
     ns = size(s,2)
     ne = size(ew,1)
     nt = length(dt)
-    lam = zeros(T,ne,ns)  # only one lam is needed
+    lam = zeros(Tf,ne,ns)  # only one lam is needed
 
-    Jv  = zeros(T,size(P,2),ns,nt)
+    Jv  = zeros(Tf,size(P,2),ns,nt)
 
     #Do the DC part of dCdm if source is grounded and we're inverting for sigma.
     #Note that this code assumes (for grounded sources) that DC data
@@ -171,8 +172,8 @@ function getSensMatVecBE{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
         Gin    = getNodalGradientMatrix(Mesh)
         G      = Qe*Gin*Nn
         A      = getDCmatrix(Msig,G,param) # Forms matrix only if needed
-        Jvdc   = zeros(T,size(P,2),ns)
-        rhs    = zeros(T,size(G,2),ns)
+        Jvdc   = zeros(Tf,size(P,2),ns)
+        rhs    = zeros(Tf,size(G,2),ns)
         for j = 1:ns
             Gzi      = G'*Ne'*getdEdgeMassMatrix(Mesh,sigma,-Ne*ew[:,j,1])
             rhs[:,j] = Gzi*DrhoDsig*DsigDmz
@@ -189,7 +190,7 @@ function getSensMatVecBE{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
             DCsolver.doClear = 1
         end
     elseif groundedSource && ~invertSigma
-       Jvdc   = zeros(T,size(P,2),ns)
+       Jvdc   = zeros(Tf,size(P,2),ns)
     end
 
     if invertMu
@@ -198,7 +199,8 @@ function getSensMatVecBE{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
 
     iSolver     = 0
     uniqueSteps = unique(dt)
-    A           = speye(size(Ne,2)) #spzeros(T,0,0)
+    Tn          = typeof(param.Mesh.nc)
+    A           = speye(Tf,Tn,size(Ne,2)) #spzeros(T,0,0)
     for i=1:nt
         # Form A when needed. It is not stored or formed if
         # param.storageLevel == :Factors
@@ -274,7 +276,7 @@ end
 
 #-------------------------------------------------------
 
-function getSensMatVecBDF2{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
+function getSensMatVecBDF2{Tf<:Real}(DsigDmz::Vector{Tf},DmuDmz::Vector{Tf},
                                     model::MaxwellTimeModel,param::MaxwellTimeParam)
     #getSensMatVec(z,sigma,param)
     #This function computes (dData/dsigma)*z for BDF2 time-stepping
@@ -307,6 +309,7 @@ function getSensMatVecBDF2{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
     s            = param.Sources
 
     # Get matrices
+    Tn     = typeof(param.Mesh.nc)
     Ne,Qe, = getEdgeConstraints(Mesh)
     Msig   = getEdgeMassMatrix(Mesh,vec(sigma))
     Msig   = Ne'*Msig*Ne
@@ -318,8 +321,8 @@ function getSensMatVecBDF2{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
         Mmu    = getFaceMassMatrix(Mesh,1./mu)
         Mmu    = Nf'*Mmu*Nf
     else
-        Curl = spzeros(T,0,0)
-        Mmu  = spzeros(T,0,0)
+        Curl = spzeros(Tf,Tn,0,0)
+        Mmu  = spzeros(Tf,Tn,0,0)
     end
     K = getMaxwellCurlCurlMatrix!(param,model)
 
@@ -327,8 +330,8 @@ function getSensMatVecBDF2{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
     ns = size(s,2)
     ne = size(ew,1)
     nt = length(param.dt)
-    lam = zeros(T,ne,ns,3)
-    Jv  = zeros(T,size(P,2),ns,nt)
+    lam = zeros(Tf,ne,ns,3)
+    Jv  = zeros(Tf,size(P,2),ns,nt)
 
     #Do the DC part of dCdm if source is grounded and we're inverting for sigma.
     #Note that this code assumes (for grounded sources) that DC data
@@ -341,7 +344,7 @@ function getSensMatVecBDF2{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
         Gin    = getNodalGradientMatrix(Mesh)
         G      = Qe*Gin*Nn
         A      = getDCmatrix(Msig,G,param) # Forms matrix only if needed
-        Jvdc   = zeros(T,size(P,2),ns)
+        Jvdc   = zeros(Tf,size(P,2),ns)
         for j = 1:ns
             Gzi = G'*Ne'*getdEdgeMassMatrix(Mesh,sigma,-Ne*ew[:,j,1])
             rhs = Gzi*DsigDmz
@@ -364,7 +367,7 @@ function getSensMatVecBDF2{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
         error("Inverting for mu with bdf2 time-stepping not yet supported")
     end
     uniqueSteps = unique(dt)
-    A           = speye(size(Ne,2)) # spzeros(T,0,0)
+    A           = speye(Tf,Tn,size(Ne,2)) # spzeros(T,0,0)
     A,iSolver   = getBDF2ConstDTmatrix!(dt[1],A,K,Msig,param,uniqueSteps)
     for j = 1:ns
         Gzi                 = 3/(2*dt[1])*Ne'*getdEdgeMassMatrix(Mesh,sigma,Ne*(ehat[:,j]-ew[:,j,1]))
@@ -436,13 +439,13 @@ function getSensMatVecBDF2{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
 #-------------------------------------------------------
 
 
-function getSensMatVecTRBDF2{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
+function getSensMatVecTRBDF2{Tf<:Real}(DsigDmz::Vector{Tf},DmuDmz::Vector{Tf},
                                     model::MaxwellTimeModel,param::MaxwellTimeParam)
     error("Sensitivities for TRBDF2 not implemented")
 end
 #-------------------------------------------------------
 
-function getSensMatVecBDF2ConstDT{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
+function getSensMatVecBDF2ConstDT{Tf<:Real}(DsigDmz::Vector{Tf},DmuDmz::Vector{Tf},
                                   model::MaxwellTimeModel,param::MaxwellTimeParam)
     #getSensMatVec(z,sigma,param)
     #This function computes (dData/dsigma)*z for BDF2 time-stepping
@@ -475,6 +478,7 @@ function getSensMatVecBDF2ConstDT{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
     s            = param.Sources
 
     # Get matrices
+    Tn     = typeof(param.Mesh.nc)
     Ne,Qe, = getEdgeConstraints(M)
     Msig   = getEdgeMassMatrix(M,vec(sigma))
     Msig   = Ne'*Msig*Ne
@@ -486,21 +490,21 @@ function getSensMatVecBDF2ConstDT{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
         Mmu    = getFaceMassMatrix(M,1./mu)
         Mmu    = Nf'*Mmu*Nf
     else
-        Curl = spzeros(T,0,0)
-        Mmu  = spzeros(T,0,0)
+        Curl = spzeros(Tf,Tn,0,0)
+        Mmu  = spzeros(Tf,Tn,0,0)
     end
     if param.storageLevel == :None
         K = getMaxwellCurlCurlMatrix!(param,model)
     else
-        K = spzeros(T,0,0)
+        K = spzeros(Tf,Tn,0,0)
     end
 
     #Initialize intermediate and output arrays
     ns = size(s,2)
     ne = size(ew,1)
     nt = length(param.dt)
-    lam = zeros(T,ne,ns,3)
-    Jv  = zeros(T,size(P,2),ns,nt)
+    lam = zeros(Tf,ne,ns,3)
+    Jv  = zeros(Tf,size(P,2),ns,nt)
 
     #Do the DC part of dCdm if source is grounded and we're inverting for sigma.
     #Note that this code assumes (for grounded sources) that DC data
@@ -513,7 +517,7 @@ function getSensMatVecBDF2ConstDT{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
         Gin    = getNodalGradientMatrix(M)
         G      = Qe*Gin*Nn
         A      = getDCmatrix(Msig,G,param) # Forms matrix only if needed
-        Jvdc   = zeros(T,size(P,2),ns)
+        Jvdc   = zeros(Tf,size(P,2),ns)
         for j = 1:ns
             Gzi = G'*Ne'*getdEdgeMassMatrix(M,sigma,-Ne*ew[:,j,1])
             rhs = Gzi*DsigDmz
@@ -536,7 +540,7 @@ function getSensMatVecBDF2ConstDT{T<:Real}(DsigDmz::Vector{T},DmuDmz::Vector{T},
         error("Inverting for mu with bdf2 time-stepping not yet supported")
     end
     uniqueSteps = [dt]
-    A           = speye(size(Ne,2)) #spzeros(T,0,0)
+    A           = speye(Tf,Tn,size(Ne,2)) #spzeros(T,0,0)
     A,iSolver   = getBDF2ConstDTmatrix!(dt,A,K,Msig,param,uniqueSteps)
     for j = 1:ns
         Gzi                 = 3/(2*dt)*Ne'*getdEdgeMassMatrix(M,sigma,Ne*(ehat[:,j]-ew[:,j,1]))

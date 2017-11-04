@@ -1,7 +1,7 @@
 export getSensTMatVec,interpLocalToGlobal
 
 # For backward compatibility
-function getSensTMatVec{T<:Real}(z::Vector{T},sigma::Vector{T},
+function getSensTMatVec{Tf<:Real}(z::Vector{Tf},sigma::Vector{Tf},
                                  param::MaxwellTimeParam)
     m   = MaxwellTimeModel(sigma,fill(convert(eltype(sigma),4*pi*1e-7),
                            param.Mesh.nc))
@@ -9,7 +9,7 @@ function getSensTMatVec{T<:Real}(z::Vector{T},sigma::Vector{T},
     return JTz.sigma
 end
 
-function getSensTMatVec{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
+function getSensTMatVec{Tf<:Real}(z::Vector{Tf},model::MaxwellTimeModel,
                                  param::MaxwellTimeParam)
 
     if param.sensitivityMethod == :Explicit
@@ -55,7 +55,7 @@ function getSensTMatVec{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
     end
 end
 
-function getSensTMatVecBE{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
+function getSensTMatVecBE{Tf<:Real}(z::Vector{Tf},model::MaxwellTimeModel,
                                    param::MaxwellTimeParam)
     #getSensTMatVec(z,sigma,param)
     #This function computes (dData/dsigma)^T*z for BE time-stepping
@@ -80,6 +80,7 @@ function getSensTMatVecBE{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
     s             = param.Sources
 
     # Get matrices
+    Tn     = typeof(param.Mesh.nc)
     Ne,Qe, = getEdgeConstraints(Mesh)
     Msig   = getEdgeMassMatrix(Mesh,vec(sigma))
     Msig   = Ne'*Msig*Ne
@@ -92,14 +93,14 @@ function getSensTMatVecBE{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
         Mmu       = getFaceMassMatrix(Mesh,1./mu)
         Mmu       = Nf'*Mmu*Nf
         DmuinvDmu = spdiagm(-1./(mu.^2))
-        curllam     = zeros(T,size(Mesh.Qf,1))
-        nfcurllam   = zeros(T,size(Mesh.Nf,1))
-        Gzitnfcurllam = zeros(T,size(DmuinvDmu,2))
+        curllam     = zeros(Tf,size(Mesh.Qf,1))
+        nfcurllam   = zeros(Tf,size(Mesh.Nf,1))
+        Gzitnfcurllam = zeros(Tf,size(DmuinvDmu,2))
     end
     if param.storageLevel == :None
         K = getMaxwellCurlCurlMatrix!(param,model)
     else
-        K = spzeros(T,0,0)
+        K = spzeros(Tf,Tn,0,0)
     end
 
     #Initialize intermediate and output arrays
@@ -107,7 +108,7 @@ function getSensTMatVecBE{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
     ne  = size(ew,1)
     nt  = length(dt)
     nr  = size(P,2)
-    lam = zeros(T,ne,ns) # only one lam is needed
+    lam = zeros(Tf,ne,ns) # only one lam is needed
 
     # Multiply by transpose of time interpolation matrix
     # To map from data space to data at all times space
@@ -129,18 +130,18 @@ function getSensTMatVecBE{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
 #        end
     end
 
-    JTvSigma    = zeros(T,length(sigma))
-    JTvMu       = zeros(T,length(mu))
+    JTvSigma    = zeros(Tf,length(sigma))
+    JTvMu       = zeros(Tf,length(mu))
     dt          = [dt[:];dt[end]]
     uniqueSteps = unique(dt)
-    A           = speye(size(Ne,2)) #spzeros(T,0,0)
+    A           = speye(Tf,Tn,size(Ne,2)) #spzeros(T,0,0)
     iSolver     = 0
     dtLast      = -1.0 # Size of last time step, used to check if
                       # factorization of Forward mod. matrix is needed.
-    Nelam       = Array{T}(size(Ne,1))
+    Nelam       = Array{Tf}(size(Ne,1))
    # GzitNelam   = zeros(T,Mesh.nc)
     dfields = Array{Float64}(size(Ne,1))
-    
+
     for i=length(dt)-1:-1:1
         if dt[i] != dtLast
             A,iSolver = getBEMatrix!(dt[i],A,K,Msig,param,uniqueSteps)
@@ -150,7 +151,7 @@ function getSensTMatVecBE{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
        # rhs = pz[:,:,i] + 1/dt[i+1]*Msig*lam[:,:,2]
         rhs = P*ptz[:,:,ij] + (1/dt[i+1])*Msig*lam
 
-        
+
         lam, EMsolvers[iSolver] = solveMaxTimeBE!(A,rhs,Msig,Mesh,dt,i,storageLevel,
                                                   EMsolvers[iSolver])
 
@@ -206,7 +207,7 @@ end
 
 #----------------------------------------------------------------------
 
-function getSensTMatVecBDF2{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
+function getSensTMatVecBDF2{Tf<:Real}(z::Vector{Tf},model::MaxwellTimeModel,
     param::MaxwellTimeParam)
     # Unpack model into conductivity and magnetic permeability
     sigma       = model.sigma
@@ -228,6 +229,7 @@ function getSensTMatVecBDF2{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
     ehat          = param.AuxFields
 
     # Get matrices
+    Tn     = typeof(param.Mesh.nc)
     Ne,Qe, = getEdgeConstraints(Mesh)
     Msig   = getEdgeMassMatrix(Mesh,vec(sigma))
     Msig   = Ne'*Msig*Ne
@@ -239,8 +241,8 @@ function getSensTMatVecBDF2{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
         Mmu    = getFaceMassMatrix(Mesh,1./mu)
         Mmu    = Nf'*Mmu*Nf
     else
-        Curl = spzeros(T,0,0)
-        Mmu  = spzeros(T,0,0)
+        Curl = spzeros(Tf,Tn,0,0)
+        Mmu  = spzeros(Tf,Tn,0,0)
     end
     K = getMaxwellCurlCurlMatrix!(param,model)
 
@@ -249,7 +251,7 @@ function getSensTMatVecBDF2{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
     ne  = size(ew,1)
     nt  = length(dt)
     nr  = size(P,2)
-    lam = zeros(T,ne,ns,3)
+    lam = zeros(Tf,ne,ns,3)
 
     #For debugging
     Nn,Qn,   = getNodalConstraints(Mesh)
@@ -267,7 +269,7 @@ function getSensTMatVecBDF2{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
 
     if groundedSource
         ptz  = reshape(ptz,nr,ns,nt+1)
-        pz   = zeros(T,ne,ns,nt)
+        pz   = zeros(Tf,ne,ns,nt)
         for i=1:ns
             for j=1:nt
                 pz[:,i,j] = P*ptz[:,i,j+1]
@@ -275,7 +277,7 @@ function getSensTMatVecBDF2{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
         end
     else
         ptz  = reshape(ptz,nr,ns,nt)
-        pz   = zeros(T,ne,ns,nt)
+        pz   = zeros(Tf,ne,ns,nt)
         for i=1:ns
             for j=1:nt
                 pz[:,i,j] = P*ptz[:,i,j]
@@ -285,16 +287,16 @@ function getSensTMatVecBDF2{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
 
 #      JTvSigma = 0
 #      JTvMu    = 0
-    JTv = zeros(T,Mesh.nc)
+    JTv = zeros(Tf,Mesh.nc)
     uniqueSteps = unique(dt)
-    A           = speye(size(Ne,2)) #spzeros(T,0,0)
+    A           = speye(Tf,Tn,size(Ne,2)) #spzeros(T,0,0)
     iSolver     = 0
     #A,iSolver   = getBDF2ConstDTmatrix!(dt[end],A,K,Msig,param,uniqueSteps)
     dt          = [dt;dt[end];dt[end]]
-    nelam       = zeros(T,size(Ne,1))
-    Gzitnelam   = zeros(T,Mesh.nc)
+    nelam       = zeros(Tf,size(Ne,1))
+    Gzitnelam   = zeros(Tf,Mesh.nc)
     for i=nt:-1:1
-        tau1 = i > 1 ? dt[i]/dt[i-1] : one(T)
+        tau1 = i > 1 ? dt[i]/dt[i-1] : one(Tf)
         tau2 = dt[i+1]/dt[i]
         tau3 = dt[i+2]/dt[i+1]
         g1   = (1+2*tau1)/(1+tau1)
@@ -397,12 +399,12 @@ function getSensTMatVecBDF2{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
             DCsolver.doClear = 1
         end
     end
-    return MaxwellTimeModel(JTv,[zero(T)],invertSigma,invertMu) #,tmp
+    return MaxwellTimeModel(JTv,[zero(Tf)],invertSigma,invertMu) #,tmp
 end
 
 #----------------------------------------------------------------------
 
-function getSensTMatVecBDF2ConstDT{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
+function getSensTMatVecBDF2ConstDT{Tf<:Real}(z::Vector{Tf},model::MaxwellTimeModel,
                                    param::MaxwellTimeParam)
 	#getSensTMatVec(z,sigma,param)
 	#This function computes (dData/dsigma)^T*z for BDF2 time-stepping
@@ -432,6 +434,7 @@ function getSensTMatVecBDF2ConstDT{T<:Real}(z::Vector{T},model::MaxwellTimeModel
     ehat          = param.AuxFields
 
     # Get matrices
+    Tn     = typeof(param.Mesh.nc)
     Ne,Qe, = getEdgeConstraints(M)
     Msig   = getEdgeMassMatrix(M,vec(sigma))
     Msig   = Ne'*Msig*Ne
@@ -443,8 +446,8 @@ function getSensTMatVecBDF2ConstDT{T<:Real}(z::Vector{T},model::MaxwellTimeModel
         Mmu    = getFaceMassMatrix(M,1./mu)
         Mmu    = Nf'*Mmu*Nf
     else
-        Curl = spzeros(T,0,0)
-        Mmu  = spzeros(T,0,0)
+        Curl = spzeros(Tf,Tn,0,0)
+        Mmu  = spzeros(Tf,Tn,0,0)
     end
     K = getMaxwellCurlCurlMatrix!(param,model)
 
@@ -453,7 +456,7 @@ function getSensTMatVecBDF2ConstDT{T<:Real}(z::Vector{T},model::MaxwellTimeModel
     ne  = size(ew,1)
     nt  = length(param.dt)
     nr  = size(P,2)
-    lam = zeros(T,ne,ns,3)
+    lam = zeros(Tf,ne,ns,3)
 
     # Multiply by transpose of time interpolation matrix
     # To map from data space to data at all times space
@@ -464,7 +467,7 @@ function getSensTMatVecBDF2ConstDT{T<:Real}(z::Vector{T},model::MaxwellTimeModel
 
     if groundedSource
       ptz  = reshape(ptz,nr,ns,nt+1)
-      pz   = zeros(T,ne,ns,nt)
+      pz   = zeros(Tf,ne,ns,nt)
       for i=1:ns
         for j=1:nt
           pz[:,i,j] = P*ptz[:,i,j+1]
@@ -472,7 +475,7 @@ function getSensTMatVecBDF2ConstDT{T<:Real}(z::Vector{T},model::MaxwellTimeModel
       end
     else
       ptz  = reshape(ptz,nr,ns,nt)
-      pz   = zeros(T,ne,ns,nt)
+      pz   = zeros(Tf,ne,ns,nt)
       for i=1:ns
         for j=1:nt
           pz[:,i,j] = P*ptz[:,i,j]
@@ -484,7 +487,7 @@ function getSensTMatVecBDF2ConstDT{T<:Real}(z::Vector{T},model::MaxwellTimeModel
 #     JTvMu    = 0
     JTv = 0
     uniqueSteps = [dt]
-    A           = speye(size(Ne,2)) #spzeros(T,0,0)
+    A           = speye(Tf,Tn,size(Ne,2)) #spzeros(T,0,0)
     A,iSolver   = getBDF2ConstDTmatrix!(dt,A,K,Msig,param,uniqueSteps)
     for i=nt:-1:2
       for j = 1:ns
@@ -548,12 +551,12 @@ function getSensTMatVecBDF2ConstDT{T<:Real}(z::Vector{T},model::MaxwellTimeModel
             DCsolver.doClear = 1
         end
     end
-    return MaxwellTimeModel(JTv,[zero(T)],invertSigma,invertMu)
+    return MaxwellTimeModel(JTv,[zero(Tf)],invertSigma,invertMu)
 end
 
 #-------------------------------------------------------
 
-function getSensTMatVecTRBDF2{T<:Real}(z::Vector{T},model::MaxwellTimeModel,
+function getSensTMatVecTRBDF2{Tf<:Real}(z::Vector{Tf},model::MaxwellTimeModel,
                                    param::MaxwellTimeParam)
     error("Sensitivities for TRBDF2 not implemented")
 end
