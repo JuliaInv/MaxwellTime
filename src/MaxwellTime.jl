@@ -31,8 +31,11 @@ import jInv.ForwardShare.interpLocalToGlobal
 import jInv.InverseSolve.AbstractModel
 #export ForwardProbType
 
-# Import MatrixOrScaling typealias
-import jInv.ForwardShare.MatrixOrScaling
+# Import MatrixOrScaling typealias. This may get resurrected in the future
+# so I'm commenting out the line below rather than deleting it but for now,
+# jInv.ForwardShare.MatrixOrScaling doesn't exist on any public branches
+# so leaving the below line throws a warning.
+#import jInv.ForwardShare.MatrixOrScaling
 
 # Import speye method from JOcTree that allows full control over the
 # floating point and integer types used in a sparse identity matrix
