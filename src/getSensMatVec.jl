@@ -45,17 +45,16 @@ This function checks value of the symbol param.sensitivityMethod. If it is set t
 :Explicit then explicit sensitivities are computed, otherwise implicit sensitivities
 are used.
 """
-function getSensMatVec(DsigDmz::MaxwellTimeModel,model::MaxwellTimeModel,
+function getSensMatVec(x::MaxwellTimeModel,model::MaxwellTimeModel,
                        param::MaxwellTimeParam)
 
-    zsig = DsigDmz.sigma
-    zmu  = DsigDmz.mu
+    activeProps = model.activeInversionProperties
 
     if param.sensitivityMethod == :Explicit
-        if model.invertSigma && model.invertMu
+        if in("sigmaCell",activeProps) && in("muCell",activeProps)
             error("Using explicit sensitivities while inverting sigma and mu simultaneously is not supported")
         end
-        mod = model.invertSigma ? model.sigma : model.mu
+        mod = in("sigmaCell",activeProps) ? model.values["sigmaCell"] : model.values["muCell"]
         if isempty(param.Sens)
            #  error("Why are we here?")
             ndata     = size(param.ObsTimes,1)
@@ -66,7 +65,7 @@ function getSensMatVec(DsigDmz::MaxwellTimeModel,model::MaxwellTimeModel,
             	fill!(v, 0.0)
             	v[k]     = 1.0
             	JTvStruc = sensTFunc(v,model,param)
-            	JTv      = model.invertSigma ? JTvStruc.sigma : JTvStruc.mu
+            	JTv      = in("sigmaCell",activeProps) ? JTvStruc.values["sigmaCell"] : JTvStruc.values["muCell"]
             	J[k,:] = vec(JTv)
             end
             param.Sens = J
@@ -83,22 +82,23 @@ function getSensMatVec(DsigDmz::MaxwellTimeModel,model::MaxwellTimeModel,
             DCsolver.doClear = 1
             gc()
 
-         end
-         z = model.invertSigma ? zsig : zmu
-         return param.Sens*z
+        end
+        z = in("sigmaCell",activeProps) ? x.values["sigmaCell"] : x.values["muCell"]
+        return param.Sens*z
     else # Implicit sensitivities
         # Dispatch based on forward modelling integration method,
         # e.g. BE vs BDF2
         sensFunc = sensitivityFunctions[param.timeIntegrationMethod]
-        Jz       = sensFunc(zsig,zmu,model,param)
-        return Jz
+        Jx        = sensFunc(x,model,param)
+        return Jx
     end
 
 end
 
 
-function getSensMatVecBE{Tf<:Real}(DsigDmz::Vector{Tf},DmuDmz::Vector{Tf},
-                                  model::MaxwellTimeModel,param::MaxwellTimeParam)
+function getSensMatVecBE{Tf<:Real}(x::MaxwellTimeModel{Tf},
+                                   model::MaxwellTimeModel,
+                                   param::MaxwellTimeParam)
 
     # getSensMatVecBE(z,sigma,param)
     # This function computes (dData/dsigma)*DsigDmz + (dData/dmu)*DmuDmz
@@ -115,10 +115,11 @@ function getSensMatVecBE{Tf<:Real}(DsigDmz::Vector{Tf},DmuDmz::Vector{Tf},
     #         |                     .                       |
 
     # Unpack model into conductivity and magnetic permeability
-    sigma = param.modUnits == :res ? 1./model.sigma : model.sigma
-    mu          = model.mu
-    invertSigma = model.invertSigma
-    invertMu    = model.invertMu
+    sigma = model.values["sigmaCell"]
+    sigma = param.modUnits == :res ? 1./sigma : sigma
+    mu          = model.values["muCell"]
+    invertSigma = in("sigmaCell", model.activeInversionProperties)
+    invertMu    = in(   "muCell", model.activeInversionProperties)
 
     #Unpack param
     Mesh          = param.Mesh
@@ -133,7 +134,7 @@ function getSensMatVecBE{Tf<:Real}(DsigDmz::Vector{Tf},DmuDmz::Vector{Tf},
     Ne,Qe,   = getEdgeConstraints(Mesh)
     Msig     = getEdgeMassMatrix(Mesh,vec(sigma))
     Msig     = Ne'*Msig*Ne
-    P        = Ne'*param.Obs
+    P        = param.Obs
     DrhoDsig = param.modUnits == :res ? spdiagm(-(sigma.^2)) : UniformScaling(one(Tf))
     if invertMu || (param.storageLevel == :None)
         Nf,Qf,    = getFaceConstraints(Mesh)
@@ -176,7 +177,7 @@ function getSensMatVecBE{Tf<:Real}(DsigDmz::Vector{Tf},DmuDmz::Vector{Tf},
         rhs    = zeros(Tf,size(G,2),ns)
         for j = 1:ns
             Gzi      = G'*Ne'*getdEdgeMassMatrix(Mesh,sigma,-Ne*ew[:,j,1])
-            rhs[:,j] = Gzi*DrhoDsig*DsigDmz
+            rhs[:,j] = Gzi*DrhoDsig*x.values["sigmaCell"]
         end
         lam0,DCsolver = solveDC!(A,rhs,DCsolver)
         lam    = -G*lam0 #Taking gradient of lam0
@@ -209,10 +210,10 @@ function getSensMatVecBE{Tf<:Real}(DsigDmz::Vector{Tf},DmuDmz::Vector{Tf},
         end
         rhs = (1/dt[i])*(Msig*lam)
         if invertSigma
-            addDCDsigmaBE!(Mesh,sigma,Ne,ew[:,:,i:i+1],dt[i],DrhoDsig*DsigDmz,ns,rhs)
+            addDCDsigmaBE!(Mesh,sigma,Ne,ew[:,:,i:i+1],dt[i],DrhoDsig*x.values["sigmaCell"],ns,rhs)
         end
         if invertMu
-            addDCDmuBE!(Mesh,mu,Nf,Curl,ew[:,:,i+1],DmuinvDmu*DmuDmz,ns,rhs)
+            addDCDmuBE!(Mesh,mu,Nf,Curl,ew[:,:,i+1],DmuinvDmu*x.values["muCell"],ns,rhs)
         end
 
         lam,EMsolvers[iSolver] = solveMaxTimeBE!(A,rhs,Msig,Mesh,dt,i,
@@ -276,8 +277,9 @@ end
 
 #-------------------------------------------------------
 
-function getSensMatVecBDF2{Tf<:Real}(DsigDmz::Vector{Tf},DmuDmz::Vector{Tf},
-                                    model::MaxwellTimeModel,param::MaxwellTimeParam)
+function getSensMatVecBDF2{Tf<:Real}(x::MaxwellTimeModel{Tf},
+                                    model::MaxwellTimeModel,
+                                    param::MaxwellTimeParam)
     #getSensMatVec(z,sigma,param)
     #This function computes (dData/dsigma)*z for BDF2 time-stepping
     #forward problem with constant step-size. It handles grounded
@@ -294,10 +296,10 @@ function getSensMatVecBDF2{Tf<:Real}(DsigDmz::Vector{Tf},DmuDmz::Vector{Tf},
     #      |                      .                                              |
     #      |                      .                                              |
     # Unpack model into conductivity and magnetic permeability
-    sigma       = model.sigma
-    mu          = model.mu
-    invertSigma = model.invertSigma
-    invertMu    = model.invertMu
+    sigma       = model.values["sigmaCell"]
+    mu          = model.values["muCell"]
+    invertSigma = in("sigmaCell", model.activeInversionProperties)
+    invertMu    = in("muCell", model.activeInversionProperties)
 
     #Unpack param
     Mesh         = param.Mesh
@@ -313,7 +315,7 @@ function getSensMatVecBDF2{Tf<:Real}(DsigDmz::Vector{Tf},DmuDmz::Vector{Tf},
     Ne,Qe, = getEdgeConstraints(Mesh)
     Msig   = getEdgeMassMatrix(Mesh,vec(sigma))
     Msig   = Ne'*Msig*Ne
-    P      = Ne'*param.Obs
+    P      = param.Obs
     if invertMu || (param.storageLevel == :None)
         Nf,Qf, = getFaceConstraints(Mesh)
         Curl   = getCurlMatrix(Mesh)
@@ -347,7 +349,7 @@ function getSensMatVecBDF2{Tf<:Real}(DsigDmz::Vector{Tf},DmuDmz::Vector{Tf},
         Jvdc   = zeros(Tf,size(P,2),ns)
         for j = 1:ns
             Gzi = G'*Ne'*getdEdgeMassMatrix(Mesh,sigma,-Ne*ew[:,j,1])
-            rhs = Gzi*DsigDmz
+            rhs = Gzi*x.values["sigmaCell"]
             lam0,DCsolver    = solveDC!(A,rhs,DCsolver)
             lam[:,j,1]       = -G*lam0 #Taking gradient of lam0
                                        #Prepares for data projection and
@@ -371,11 +373,11 @@ function getSensMatVecBDF2{Tf<:Real}(DsigDmz::Vector{Tf},DmuDmz::Vector{Tf},
     A,iSolver   = getBDF2ConstDTmatrix!(dt[1],A,K,Msig,param,uniqueSteps)
     for j = 1:ns
         Gzi                 = 3/(2*dt[1])*Ne'*getdEdgeMassMatrix(Mesh,sigma,Ne*(ehat[:,j]-ew[:,j,1]))
-        rhs                 = Gzi*DsigDmz + 3/(2*dt[1])*Msig*lam[:,j,1]
+        rhs                 = Gzi*x.values["sigmaCell"] + 3/(2*dt[1])*Msig*lam[:,j,1]
         lmTmp,EMsolvers[1]      = solveMaxTimeBDF2ConstDT!(A,rhs,Msig,Mesh,dt[1],EMsolvers[1])
         EMsolvers[1].doClear    = 0
         Gzi                 = Ne'*getdEdgeMassMatrix(Mesh,sigma,1/dt[1]*Ne*(1.5*ew[:,j,2]-0.75*ehat[:,j]-0.75*ew[:,j,1]))
-        rhs                 = Gzi*DsigDmz + 3/(4*dt[1])*Msig*lam[:,j,1] + 3/(4*dt[1])*Msig*lmTmp
+        rhs                 = Gzi*x.values["sigmaCell"] + 3/(4*dt[1])*Msig*lam[:,j,1] + 3/(4*dt[1])*Msig*lmTmp
         lam[:,j,2],EMsolvers[1] = solveMaxTimeBDF2ConstDT!(A,rhs,Msig,Mesh,dt[1],EMsolvers[1])
         Jv[:,j,1]           = -P'*lam[:,j,2]
     end
@@ -400,7 +402,7 @@ function getSensMatVecBDF2{Tf<:Real}(DsigDmz::Vector{Tf},DmuDmz::Vector{Tf},
             Atr = K + (g1/dt[i])*Msig
             for j = 1:ns
                 Gzi = getdEdgeMassMatrix(Mesh,sigma,Ne*(g1*ew[:,j,i+1]-
-                       g2*ew[:,j,i]+g3*ew[:,j,i-1]))*DsigDmz
+                       g2*ew[:,j,i]+g3*ew[:,j,i-1]))*x.values["sigmaCell"]
                 rhs = (1/dt[i])*(Ne'*Gzi +
                       Msig*(g2*lam[:,j,2]-g3*lam[:,j,1]))
                 lam[:,j,3],cgFlag,err,iterTmp, = cg(Atr,rhs,
@@ -418,7 +420,7 @@ function getSensMatVecBDF2{Tf<:Real}(DsigDmz::Vector{Tf},DmuDmz::Vector{Tf},
 
        	        Gzi = (1/dt[i])*Ne'*getdEdgeMassMatrix(Mesh,sigma,Ne*(1.5*ew[:,j,i+1]-
        	               2*ew[:,j,i]+0.5*ew[:,j,i-1]))
-       	        rhs = Gzi*DsigDmz + 1/dt[i]*Msig*(2*lam[:,j,2]-0.5*lam[:,j,1])
+       	        rhs = Gzi*x.values["sigmaCell"] + 1/dt[i]*Msig*(2*lam[:,j,2]-0.5*lam[:,j,1])
        	        lam[:,j,3],EMsolvers[iSolver] = solveMaxTimeBDF2ConstDT!(A,rhs,Msig,Mesh,dt[i],EMsolvers[iSolver])
                 # compute Jv
                 Jv[:,j,i]  = -P'*(lam[:,j,3])
@@ -445,7 +447,7 @@ function getSensMatVecTRBDF2{Tf<:Real}(DsigDmz::Vector{Tf},DmuDmz::Vector{Tf},
 end
 #-------------------------------------------------------
 
-function getSensMatVecBDF2ConstDT{Tf<:Real}(DsigDmz::Vector{Tf},DmuDmz::Vector{Tf},
+function getSensMatVecBDF2ConstDT{Tf<:Real}(x::MaxwellTimeModel{Tf},
                                   model::MaxwellTimeModel,param::MaxwellTimeParam)
     #getSensMatVec(z,sigma,param)
     #This function computes (dData/dsigma)*z for BDF2 time-stepping
@@ -463,10 +465,10 @@ function getSensMatVecBDF2ConstDT{Tf<:Real}(DsigDmz::Vector{Tf},DmuDmz::Vector{T
     #      |                      .                                              |
     #      |                      .                                              |
     # Unpack model into conductivity and magnetic permeability
-    sigma       = model.sigma
-    mu          = model.mu
-    invertSigma = model.invertSigma
-    invertMu    = model.invertMu
+    sigma       = model.values["sigmaCell"]
+    mu          = model.values["muCell"]
+    invertSigma = in("sigmaCell", model.activeInversionProperties)
+    invertMu    = in(   "muCell", model.activeInversionProperties)
 
     #Unpack param
     M            = param.Mesh
@@ -482,7 +484,7 @@ function getSensMatVecBDF2ConstDT{Tf<:Real}(DsigDmz::Vector{Tf},DmuDmz::Vector{T
     Ne,Qe, = getEdgeConstraints(M)
     Msig   = getEdgeMassMatrix(M,vec(sigma))
     Msig   = Ne'*Msig*Ne
-    P      = Ne'*param.Obs
+    P      = param.Obs
     if invertMu || (param.storageLevel == :None)
         Nf,Qf, = getFaceConstraints(M)
         Curl   = getCurlMatrix(M)
@@ -520,7 +522,7 @@ function getSensMatVecBDF2ConstDT{Tf<:Real}(DsigDmz::Vector{Tf},DmuDmz::Vector{T
         Jvdc   = zeros(Tf,size(P,2),ns)
         for j = 1:ns
             Gzi = G'*Ne'*getdEdgeMassMatrix(M,sigma,-Ne*ew[:,j,1])
-            rhs = Gzi*DsigDmz
+            rhs = Gzi*x.values["sigmaCell"]
             lam0,DCsolver    = solveDC!(A,rhs,DCsolver)
             lam[:,j,1]       = -G*lam0 #Taking gradient of lam0
                                        #Prepares for data projection and
@@ -544,11 +546,11 @@ function getSensMatVecBDF2ConstDT{Tf<:Real}(DsigDmz::Vector{Tf},DmuDmz::Vector{T
     A,iSolver   = getBDF2ConstDTmatrix!(dt,A,K,Msig,param,uniqueSteps)
     for j = 1:ns
         Gzi                 = 3/(2*dt)*Ne'*getdEdgeMassMatrix(M,sigma,Ne*(ehat[:,j]-ew[:,j,1]))
-        rhs                 = Gzi*DsigDmz + 3/(2*dt)*Msig*lam[:,j,1]
+        rhs                 = Gzi*x.values["sigmaCell"] + 3/(2*dt)*Msig*lam[:,j,1]
         lmTmp,EMsolver      = solveMaxTimeBDF2ConstDT!(A,rhs,Msig,M,dt,EMsolver)
         EMsolver.doClear    = 0
         Gzi                 = Ne'*getdEdgeMassMatrix(M,sigma,1/dt*Ne*(1.5*ew[:,j,2]-0.75*ehat[:,j]-0.75*ew[:,j,1]))
-        rhs                 = Gzi*DsigDmz + 3/(4*dt)*Msig*lam[:,j,1] + 3/(4*dt)*Msig*lmTmp
+        rhs                 = Gzi*x.values["sigmaCell"] + 3/(4*dt)*Msig*lam[:,j,1] + 3/(4*dt)*Msig*lmTmp
         lam[:,j,2],EMsolver = solveMaxTimeBDF2ConstDT!(A,rhs,Msig,M,dt,EMsolver)
         Jv[:,j,1]           = -P'*lam[:,j,2]
     end
@@ -558,7 +560,7 @@ function getSensMatVecBDF2ConstDT{Tf<:Real}(DsigDmz::Vector{Tf},DmuDmz::Vector{T
         for j = 1:ns
        	       Gzi = (1/dt)*Ne'*getdEdgeMassMatrix(M,sigma,Ne*(1.5*ew[:,j,i+1]-
        	              2*ew[:,j,i]+0.5*ew[:,j,i-1]))
-       	       rhs = Gzi*DsigDmz + 1/dt*Msig*(2*lam[:,j,2]-0.5*lam[:,j,1])
+       	       rhs = Gzi*x.values["sigmaCell"] + 1/dt*Msig*(2*lam[:,j,2]-0.5*lam[:,j,1])
        	       lam[:,j,3],EMsolver = solveMaxTimeBDF2ConstDT!(A,rhs,Msig,M,dt,EMsolver)
             # compute Jv
             Jv[:,j,i]  = -P'*(lam[:,j,3])

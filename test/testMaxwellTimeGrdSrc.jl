@@ -187,8 +187,9 @@ println(" ")
 println("==========  Test mu inversion ======================")
 println(" ")
 
-m  = MaxwellTimeModel(sigma,chi,false,true)
-m0 = MaxwellTimeModel(sigma,zeros(length(chi)),false,false)
+m  = MaxwellTimeModel(Dict("sigmaCell"=>sigma,"muCell"=>chi),
+                      ["muCell"])
+m0 = MaxwellTimeModel(Dict("sigmaCell"=>sigma),Array{String,1}())
 obsTimes   = cumsum(dt[2:end])
 pFor       = getMaxwellTimeParam(Msh,Sources,P',obsTimes,t0,dt,wave,sourceType)
 d,pFor = getData(m,pFor)
@@ -213,13 +214,15 @@ println("==========  Adjoint Test ======================")
 println(" ")
 
 v     = randn(prod(size(d)));
-Dsig  = Vector();
 dmudm = spdiagm(fill(pi*4e-7,length(mu)));
-push!(Dsig,UniformScaling(1.0));
-push!(Dsig,dmudm);
+dm    = MaxwellTimeModelDerivative(Dict(
+        "muCell"=>dmudm),["muCell"])
 
-zmod = MaxwellTimeModel(sigma,dmudm*z,false,true)
-m2   = MaxwellTimeModel(sigma,mu0*(1+chi),false,true)
+zmod = dm*z
+# zmod = MaxwellTimeModel(Dict("sigmaCell"=>sigma,
+#                        "muCell"=>dmudm*z),["muCell"])
+m2   = MaxwellTimeModel(Dict("sigmaCell"=>sigma,
+                        "muCell"=>mu0*(1+chi)),["muCell"])
 tic()
 Jz = getSensMatVec(zmod,m2,pFor)
 toc()
@@ -227,7 +230,7 @@ I1 = dot(v,Jz)
 
 tic()
 JTzLoc = getSensTMatVec(v,m2,pFor)
-JTz    = interpLocalToGlobal(Dsig,JTzLoc,speye(length(mu)))
+JTz    = dm'*JTzLoc
 toc()
 
 I2 = dot(JTz,z)
@@ -240,8 +243,10 @@ println(" ")
 println("==========  Test simultaneous sigma and mu inversion ======================")
 println(" ")
 
-m    = MaxwellTimeModel(log.(sigma),chi,true,true)
-m0   = MaxwellTimeModel(zeros(length(sigma)),zeros(length(chi)),false,false)
+activeProps = ["sigmaCell", "muCell"]
+m    = MaxwellTimeModel(Dict("sigmaCell"=>log.(sigma),
+                        "muCell"=>chi),activeProps)
+m0   = MaxwellTimeModel()
 pFor = getMaxwellTimeParam(Msh,Sources,P',obsTimes,t0,dt,wave,sourceType)
 
 function f3(sigdum)
@@ -264,16 +269,18 @@ println(" ")
 println("==========  Adjoint Test ======================")
 println(" ")
 
-Dsig   = Vector()
 dsigdm = [spdiagm(sigma) spzeros(Msh.nc,Msh.nc)]
-push!(Dsig,dsigdm)
 dmudm  = [spzeros(Msh.nc,Msh.nc) spdiagm(fill(pi*4e-7,length(mu)))]
-push!(Dsig,dmudm)
+dm     = MaxwellTimeModelDerivative(Dict(
+           "sigmaCell"=>dsigdm,"muCell"=>dmudm),activeProps)
 
 z2 = rand(2*Msh.nc)
 
-zmod = MaxwellTimeModel(dsigdm*z2,dmudm*z2,true,true)
-m2   = MaxwellTimeModel(sigma,mu0*(1+chi),true,true)
+zmod = dm*z2
+# zmod = MaxwellTimeModel(Dict("sigmaCell"=>dsigdm*z2,
+#          "muCell"=>dmudm*z2),activeProps)
+m2   = MaxwellTimeModel(Dict("sigmaCell"=>sigma,
+         "muCell"=>mu0*(1+chi)),activeProps)
 tic()
 Jz = getSensMatVec(zmod,m2,pFor)
 toc()
@@ -281,7 +288,7 @@ I1 = dot(v,Jz)
 
 tic()
 JTzLoc = getSensTMatVec(v,m2,pFor)
-JTz    = interpLocalToGlobal(Dsig,JTzLoc,speye(length(mu)))
+JTz    = dm'*JTzLoc
 toc()
 
 I2 = dot(JTz,z2)

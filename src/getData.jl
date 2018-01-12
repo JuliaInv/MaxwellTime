@@ -46,8 +46,9 @@ function getData(model::MaxwellTimeModel,param::MaxwellTimeParam,doClear::Bool=f
     #println("Worker $(myid()) reached local get data method")
 
     # Unpack model into conductivity and magnetic permeability
-    sigma = param.modUnits == :res ? 1./model.sigma : model.sigma
-    mu    = model.mu
+    sigma = model.values["sigmaCell"]
+    sigma = param.modUnits == :res ? 1./sigma : sigma
+    mu    = model.values["muCell"]
 
     #Unpack param
     M             = param.Mesh
@@ -82,14 +83,14 @@ function getData(model::MaxwellTimeModel,param::MaxwellTimeParam,doClear::Bool=f
     ne            = size(Ne,2) #Number of active edges
     ns            = size(s,2)
     nt            = length(dt)+1
-    
-    
+
+
     if !isdefined(param,:fields) || size(param.fields) != (ne,ns,nt)
        param.fields  = zeros(Float64,ne,ns,nt)
     else
        fill!(param.fields, 0.0)
     end
-    
+
     e             = param.fields
 
     # Initialize matrix storage if needed. Note that if a direct solver is
@@ -120,7 +121,7 @@ function getData(model::MaxwellTimeModel,param::MaxwellTimeParam,doClear::Bool=f
     # Note (for grounded sources) that DC data
     # Are computed as the integral of electric field over a receiver
     # dipole and not as a potential difference
-    Pt = param.Obs'*Ne
+    Pt = param.Obs'
     nr = size(Pt,1)
     if (sourceType == :Galvanic)
         nt          = length(dt)+1
@@ -141,4 +142,3 @@ function getData(model::MaxwellTimeModel,param::MaxwellTimeParam,doClear::Bool=f
 
     return D, param
 end
-

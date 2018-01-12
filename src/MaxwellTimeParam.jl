@@ -226,7 +226,21 @@ function getMaxwellTimeParam{S<:Real}(Mesh::AbstractMesh,
     # This is done here to save having to do it every iteration
     # in an inversion.
     Ne,Qe, = getEdgeConstraints(Mesh)
-    s      = Ne'*Sources
+    if size(Sources,1) == size(Ne,1)
+        s = Ne'*Sources
+    elseif size(Sources,1) == size(Ne,2)
+        s = Sources
+    else
+        error("Length of source term ($(size(Sources,1)) does not match the mesh")
+    end
+
+    if size(Obs,1) == size(Ne,1)
+        P = Ne'*Obs
+    elseif size(Obs,1) == size(Ne,2)
+        P = Obs
+    else
+        error("Number of rows of observation matrix ($(size(Obs,1)) does not match the mesh")
+    end
 
     # Get rid of late times that are greater than observed.
     maxobstime = maximum(ObsTimes)
@@ -238,25 +252,28 @@ function getMaxwellTimeParam{S<:Real}(Mesh::AbstractMesh,
 
     # ObsTimeMat interpolates observations from step times
     # to observation times
-    ObsTimeMat = getObsTimeMatrix(ObsTimes,t0,dt,size(Obs,2),size(s,2),sourceType)
+    ObsTimeMat = getObsTimeMatrix(ObsTimes,t0,dt,size(P,2),size(s,2),sourceType)
 
-    K = getMaxwellCurlCurlMatrix(Mesh,fill(pi*4e-7,Mesh.nc))
-    #println("Is returned to getParam as type $(typeof(K))")
-
-    if sourceType != :Galvanic
-        clear!(Mesh.FX) ; clear!(Mesh.FY) ; clear!(Mesh.FZ)
-        clear!(Mesh.EX) ; clear!(Mesh.EY) ; clear!(Mesh.EZ)
-        clear!(Mesh.NFX); clear!(Mesh.NFY); clear!(Mesh.NFZ)
-        clear!(Mesh.NEX); clear!(Mesh.NEY); clear!(Mesh.NEZ)
-        clear!(Mesh.NN)
-    end
-    clear!(Mesh.NC)
-
+    # Apply K to source if using inductive loop potential.
+    Tn = eltype(Mesh.S.SV.nzval)
+    K  = spzeros(S,Tn,0,0)
     if sourceType == :InductiveLoopPotential
+        warn("Inductive loop potential seems to be broken and doesn't support non-vacuum susceptibility")
+        K = getMaxwellCurlCurlMatrix(Mesh,fill(pi*4e-7,Mesh.nc))
+        #println("Is returned to getParam as type $(typeof(K))")
+
+        if sourceType != :Galvanic
+            clear!(Mesh.FX) ; clear!(Mesh.FY) ; clear!(Mesh.FZ)
+            clear!(Mesh.EX) ; clear!(Mesh.EY) ; clear!(Mesh.EZ)
+            clear!(Mesh.NFX); clear!(Mesh.NFY); clear!(Mesh.NFZ)
+            clear!(Mesh.NEX); clear!(Mesh.NEY); clear!(Mesh.NEZ)
+            clear!(Mesh.NN)
+        end
+        clear!(Mesh.NC)
         s = -0.5*K*s
     end
 
-    return MaxwellTimeParam(Mesh,s,Obs,ObsTimeMat,t0,dt,wave,sourceType,storageLevel,
+    return MaxwellTimeParam(Mesh,s,P,ObsTimeMat,t0,dt,wave,sourceType,storageLevel,
                             sensitivityMethod,timeIntegrationMethod,
                             EMsolvers,DCsolver,modUnits,K)
 end
@@ -282,4 +299,13 @@ function getObsTimeMatrix{S<:Real}(ObsTimes::Vector{S},t0::S,dt::Vector{S},
         end
     end
     return mat
+end
+
+import Base.clear!
+function clear!(param::MaxwellTimeParam)
+    pFor.Fields = Array{Float64}(0)
+    clear!(param.DCsolver)
+    for solver in param.EMsolvers
+        clear!(solver)
+    end
 end

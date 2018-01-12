@@ -4,3 +4,5 @@
 *.jld
 *.mat
 *.vtu
+*.out
+*.h5dat

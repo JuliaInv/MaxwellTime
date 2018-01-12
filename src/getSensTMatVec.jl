@@ -6,17 +6,19 @@ function getSensTMatVec{Tf<:Real}(z::Vector{Tf},sigma::Vector{Tf},
     m   = MaxwellTimeModel(sigma,fill(convert(eltype(sigma),4*pi*1e-7),
                            param.Mesh.nc))
     JTz = getSensTMatVec(z,m,param)
-    return JTz.sigma
+    return JTz.values["sigmaCell"]
 end
 
 function getSensTMatVec{Tf<:Real}(z::Vector{Tf},model::MaxwellTimeModel,
                                  param::MaxwellTimeParam)
 
     if param.sensitivityMethod == :Explicit
+        invertSigma = in("sigmaCell", model.activeInversionProperties)
+        invertMu    = in(   "muCell", model.activeInversionProperties)
         if model.invertSigma && model.invertMu
             error("Using explicit sensitivities while inverting sigma and mu simultaneously is not supported")
         end
-        mod = model.invertSigma ? model.sigma : model.mu
+        mod = invertSigma ? model.values["sigmaCell"] : model.values["muCell"]
         if isempty(param.Sens)
             ndata     = size(param.ObsTimes,1)
             J         = Array{Float64}(ndata, length(mod))
@@ -26,7 +28,7 @@ function getSensTMatVec{Tf<:Real}(z::Vector{Tf},model::MaxwellTimeModel,
             	fill!(v, 0.0)
             	v[k]     = 1.0
             	JTvStruc = sensTFunc(v,model,param)
-            	JTv      = model.invertSigma ? JTvStruc.sigma : JTvStruc.mu
+            	JTv      = invertSigma ? JTvStruc.values["sigmaCell"] : JTvStruc.values["muCell"]
             	J[k,:] = vec(JTv)
             end
             param.Sens = J
@@ -45,7 +47,8 @@ function getSensTMatVec{Tf<:Real}(z::Vector{Tf},model::MaxwellTimeModel,
 
         end
 	     JTz = param.Sens'*z
-	     return MaxwellTimeModel(JTz,JTz,model.invertSigma,model.invertMu)
+         key = invertSigma ? "sigmaCell" : "muCell"
+	     return MaxwellTimeModel(Dict(key=>JTz),model.activeInversionProperties)
     else # Implicit sensitivities
         # Dispatch based on forward modelling integration method,
         # e.g. BE vs BDF2
@@ -66,10 +69,11 @@ function getSensTMatVecBE{Tf<:Real}(z::Vector{Tf},model::MaxwellTimeModel,
     # magnetic permeability
 
     # Unpack model into conductivity and magnetic permeability
-    sigma = param.modUnits == :res ? 1./model.sigma : model.sigma
-    mu          = model.mu
-    invertSigma = model.invertSigma
-    invertMu    = model.invertMu
+    sigma = model.values["sigmaCell"]
+    sigma = param.modUnits == :res ? 1./sigma : sigma
+    mu          = model.values["muCell"]
+    invertSigma = in("sigmaCell", model.activeInversionProperties)
+    invertMu    = in(   "muCell", model.activeInversionProperties)
 
     #Unpack param
     Mesh          = param.Mesh
@@ -84,7 +88,7 @@ function getSensTMatVecBE{Tf<:Real}(z::Vector{Tf},model::MaxwellTimeModel,
     Ne,Qe, = getEdgeConstraints(Mesh)
     Msig   = getEdgeMassMatrix(Mesh,vec(sigma))
     Msig   = Ne'*Msig*Ne
-    P      = Ne'*param.Obs
+    P      = param.Obs
     DrhoDsig = param.modUnits == :res ? spdiagm(-(sigma.^2)) : UniformScaling(1.0)
     if invertMu || (param.storageLevel == :None)
         Nf,Qf,    = getFaceConstraints(Mesh)
@@ -130,8 +134,13 @@ function getSensTMatVecBE{Tf<:Real}(z::Vector{Tf},model::MaxwellTimeModel,
 #        end
     end
 
-    JTvSigma    = zeros(Tf,length(sigma))
-    JTvMu       = zeros(Tf,length(mu))
+    JTv   = Dict{String,Vector{Float64}}()
+    if invertSigma
+        JTv["sigmaCell"] = zeros(Tf,length(sigma))
+    end
+    if invertMu
+        JTv["muCell"] = zeros(Tf,length(mu))
+    end
     dt          = [dt[:];dt[end]]
     uniqueSteps = unique(dt)
     A           = speye(Tf,Tn,size(Ne,2)) #spzeros(T,0,0)
@@ -159,7 +168,7 @@ function getSensTMatVecBE{Tf<:Real}(z::Vector{Tf},model::MaxwellTimeModel,
             if invertSigma
                 A_mul_B!(Nelam,Ne,lam[:,j]) # Nelam = Ne*lam[:,j]
                 A_mul_B!(dfields, Ne, ew[:,j,i+1]-ew[:,j,i])  # dfields = Ne*(ew[:,j,i+1]-ew[:,j,i])
-                JTvSigma .-= (1/dt[i])*(DrhoDsig'*dEdgeMassMatrixTrTimesVector(Mesh,sigma, dfields, Nelam))
+                JTv["sigmaCell"] .-= (1/dt[i])*(DrhoDsig'*dEdgeMassMatrixTrTimesVector(Mesh,sigma, dfields, Nelam))
             end
             if invertMu
                 curle      = Curl*ew[:,j,i+1]
@@ -167,7 +176,7 @@ function getSensTMatVecBE{Tf<:Real}(z::Vector{Tf},model::MaxwellTimeModel,
                 A_mul_B!(curllam,Curl,lam[:,j]) #curllam = Curl*lam[:,j]
                 A_mul_B!(nfcurllam,Nf,curllam) #nfcurllam  = Nf*curllam
                 At_mul_B!(Gzitnfcurllam,Gzi,nfcurllam)
-                JTvMu      .-= Gzitnfcurllam
+                JTv["muCell"]      .-= Gzitnfcurllam
             end
         end
        # lam[:,:,2] = lam[:,:,1]
@@ -195,14 +204,14 @@ function getSensTMatVecBE{Tf<:Real}(z::Vector{Tf},model::MaxwellTimeModel,
         lam0,DCsolver = solveDC!(A,rhs,DCsolver)
         for j = 1:ns
             Gzi      = G'*DrhoDsig*Ne'*getdEdgeMassMatrix(Mesh,sigma,-Ne*ew[:,j,1])
-            JTvSigma .-= Gzi'*lam0[:,j]
+            JTv["sigmaCell"] .-= Gzi'*lam0[:,j]
         end
         if param.storageLevel != :Factors
             clear!(DCsolver)
             DCsolver.doClear = 1
         end
     end
-    return MaxwellTimeModel(JTvSigma,JTvMu,invertSigma,invertMu)
+    return MaxwellTimeModel(JTv, model.activeInversionProperties)
 end
 
 #----------------------------------------------------------------------
@@ -210,10 +219,10 @@ end
 function getSensTMatVecBDF2{Tf<:Real}(z::Vector{Tf},model::MaxwellTimeModel,
     param::MaxwellTimeParam)
     # Unpack model into conductivity and magnetic permeability
-    sigma       = model.sigma
-    mu          = model.mu
-    invertSigma = model.invertSigma
-    invertMu    = model.invertMu
+    sigma       = model.values["sigmaCell"]
+    mu          = model.values["muCell"]
+    invertSigma = in("sigmaCell", model.activeInversionProperties)
+    invertMu    = in(   "muCell", model.activeInversionProperties)
 
     if invertMu
         error("Inverting for mu with bdf2 time-stepping not yet supported")
@@ -233,7 +242,7 @@ function getSensTMatVecBDF2{Tf<:Real}(z::Vector{Tf},model::MaxwellTimeModel,
     Ne,Qe, = getEdgeConstraints(Mesh)
     Msig   = getEdgeMassMatrix(Mesh,vec(sigma))
     Msig   = Ne'*Msig*Ne
-    P      = Ne'*param.Obs
+    P      = param.Obs
     if invertMu || (param.storageLevel == :None)
         Nf,Qf, = getFaceConstraints(Mesh)
         Curl   = getCurlMatrix(Mesh)
@@ -399,7 +408,7 @@ function getSensTMatVecBDF2{Tf<:Real}(z::Vector{Tf},model::MaxwellTimeModel,
             DCsolver.doClear = 1
         end
     end
-    return MaxwellTimeModel(JTv,[zero(Tf)],invertSigma,invertMu) #,tmp
+    return MaxwellTimeModel(Dict("sigmaCell"=>JTv),["sigmaCell"])
 end
 
 #----------------------------------------------------------------------
@@ -415,10 +424,10 @@ function getSensTMatVecBDF2ConstDT{Tf<:Real}(z::Vector{Tf},model::MaxwellTimeMod
 	#for first time step.
 
     # Unpack model into conductivity and magnetic permeability
-    sigma       = model.sigma
-    mu          = model.mu
-    invertSigma = model.invertSigma
-    invertMu    = model.invertMu
+    sigma       = model.values["sigmaCell"]
+    mu          = model.values["muCell"]
+    invertSigma = in("sigmaCell", model.activeInversionProperties)
+    invertMu    = in(   "muCell", model.activeInversionProperties)
 
     if invertMu
         error("Inverting for mu with bdf2 time-stepping not yet supported")
@@ -438,7 +447,7 @@ function getSensTMatVecBDF2ConstDT{Tf<:Real}(z::Vector{Tf},model::MaxwellTimeMod
     Ne,Qe, = getEdgeConstraints(M)
     Msig   = getEdgeMassMatrix(M,vec(sigma))
     Msig   = Ne'*Msig*Ne
-    P      = Ne'*param.Obs
+    P      = param.Obs
     if invertMu || (param.storageLevel == :None)
         Nf,Qf, = getFaceConstraints(M)
         Curl   = getCurlMatrix(M)
@@ -551,7 +560,7 @@ function getSensTMatVecBDF2ConstDT{Tf<:Real}(z::Vector{Tf},model::MaxwellTimeMod
             DCsolver.doClear = 1
         end
     end
-    return MaxwellTimeModel(JTv,[zero(Tf)],invertSigma,invertMu)
+    MaxwellTimeModel(Dict("sigmaCell"=>JTv),["sigmaCell"])
 end
 
 #-------------------------------------------------------

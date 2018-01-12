@@ -3,6 +3,7 @@ using MaxwellTime
 export checkDerivativeMax
 
 import jInv.Utils.getRandomTestDirection
+import jInv.ForwardShare: interpGlobalToLocal,interpLocalToGlobal
 
 function checkDerivativeMax(f::Function,df::Function,x0;kwargs...)
 	function testFun(x,v=[])
@@ -94,47 +95,45 @@ end
 function checkDerivativeMax(f::Function,x0in::MaxwellTimeModel,x0bg;out::Bool=true,tol::Float64=1.9,nSuccess::Int=3)
 # checkDerivative(f::Function,x0;out::Bool=true,tol::Float64=1.9,nSuccess::Int=3)
 	mu0 = pi*4e-7
-	if x0in.invertSigma & ~x0in.invertMu
-	    x0 = x0in.sigma
+	invertSigma = in("sigmaCell",x0in.activeInversionProperties)
+	invertMu    = in(   "muCell",x0in.activeInversionProperties)
+	if invertSigma & ~invertMu
+	    x0 = x0in.values["sigmaCell"]
 	    v  = getRandomTestDirection(x0in.sigma)
 	    modfun = x-> begin
-                             m = MaxwellTimeModel(exp(x),zeros(length(x)),true,false)
-                             Dsig = Vector();
-                             push!(Dsig,spdiagm(exp(x)))
-                             push!(Dsig,UniformScaling(1.0))
-                             return m,Dsig
+                             m  = MaxwellTimeModel(Dict("sigmaCell"=>exp(x)),["sigmaCell"])
+                             dm = MaxwellTimeModelDerivative(Dict("sigmaCell"=>spdiagm(exp.(x))),["sigmaCell"])
+                             return m,dm
                          end
-	elseif ~x0in.invertSigma & x0in.invertMu
-	    x0 = x0in.mu
-	    v  = 500*getRandomTestDirection(x0in.mu)
+	elseif ~invertSigma & invertMu
+	    x0 = x0in.values["muCell"]
+	    v  = 500*getRandomTestDirection(x0in.values["muCell"])
 	    modfun = x-> begin
-                             m = MaxwellTimeModel(zeros(length(x)),mu0*(1+x),false,true)
-                             Dsig = Vector();
-                             push!(Dsig,UniformScaling(1.0))
+                             m  = MaxwellTimeModel(Dict("muCell"=>mu0*(1+x)),["muCell"])
                              dmudm = spdiagm(fill(pi*4e-7,length(x)))
-                             push!(Dsig,dmudm)
-                             return m,Dsig
+							 dm = MaxwellTimeModelDerivative(Dict("muCell"=>dmudm),["muCell"])
+                             return m,dm
                          end
-	elseif x0in.invertSigma & x0in.invertMu
-	    x0 = [x0in.sigma;x0in.mu]
-	    v1 = getRandomTestDirection(x0in.sigma)
-	    v2 = getRandomTestDirection(x0in.mu)
+	elseif invertSigma & invertMu
+	    x0 = [x0in.values["sigmaCell"];x0in.values["muCell"]]
+	    v1 = getRandomTestDirection(x0in.values["sigmaCell"])
+	    v2 = getRandomTestDirection(x0in.values["muCell"])
 	    v  = [v1;v2]
 	    modfun = x-> begin
-	                     n = length(x0in.sigma)
-                             m = MaxwellTimeModel(exp.(x[1:n]),mu0*(1+x[n+1:end]),true,true)
-                             Dsig = Vector();
-                             push!(Dsig,[spdiagm(exp.(x[1:n])) spzeros(n,n)])
-                             push!(Dsig,[spzeros(n,n) spdiagm(fill(pi*4e-7,n))])
-                             return m,Dsig
+	                     n = length(x0in.values["sigmaCell"])
+                             m = MaxwellTimeModel(Dict("sigmaCell"=>exp.(x[1:n]),
+							       "muCell"=>mu0*(1+x[n+1:end])),["sigmaCell","muCell"])
+                             dm = MaxwellTimeModelDerivative(Dict("sigmaCell"=>[spdiagm(exp.(x[1:n])) spzeros(n,n)],
+							        "muCell"=>[spzeros(n,n) spdiagm(fill(pi*4e-7,n))]),["sigmaCell","muCell"])
+                             return m,dm
                          end
 	end
 	if out
 		println(@sprintf("%9s\t%9s\t%9s\t%9s\t%9s\t%5s","h","E0","E1","O1","O2","OK?"))
 	end
 	sig,dsig = modfun(x0)
-	sigloc   = interpGlobalToLocal(sig,speye(length(sig.sigma)),x0bg)
-	vloc     = interpGlobalToLocal(dsig,sig,v,speye(length(sig.sigma)))
+	sigloc   = interpGlobalToLocal(sig,1.0,x0bg)
+	vloc     = dsig*v
 	f0,dvf  = f(sigloc,vloc)
 	f0      = vec(f0)
 	nf0     = norm(f0)
@@ -144,7 +143,7 @@ function checkDerivativeMax(f::Function,x0in::MaxwellTimeModel,x0bg;out::Bool=tr
 	Success = zeros(10)
 	for j=1:10
 	        sigd,   = modfun(x0+10.0^(-j)*v)
-	        sigdloc = interpGlobalToLocal(sigd,speye(length(sigd.sigma)),x0bg)
+	        sigdloc = sigd+x0bg #interpGlobalToLocal(sigd,speye(length(sigd.sigma)),x0bg)
 		ft = f(sigdloc)                # function value
 		ft = vec(ft)
 		Error[j,1] = norm(f0-ft)/nf0          # Error TaylorPoly 0

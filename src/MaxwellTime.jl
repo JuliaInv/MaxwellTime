@@ -28,7 +28,6 @@ import jInv.ForwardShare.getSensMatVec
 import jInv.ForwardShare.getSensTMatVec
 import jInv.ForwardShare.interpGlobalToLocal
 import jInv.ForwardShare.interpLocalToGlobal
-import jInv.InverseSolve.AbstractModel
 #export ForwardProbType
 
 # Import MatrixOrScaling typealias. This may get resurrected in the future
@@ -63,7 +62,7 @@ integrationFunctions = Dict(zip(supportedIntegrationMethods,
 include("getData.jl")
 include("getSensMatVec.jl")
 include("getSensTMatVec.jl")
-include("interpLocalToGlobal.jl") # Specific methods for MaxwellTimeModel
+#include("interpLocalToGlobal.jl") # Specific methods for MaxwellTimeModel
                                   # mesh 2 mesh interpolation
 
 # Interface MaxwellTime to jInv.LinearSolvers to solve linear systems

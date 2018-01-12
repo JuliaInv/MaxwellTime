@@ -336,13 +336,18 @@ function getMaxwellCurlCurlMatrix(M::AbstractMesh,mu)
     #sM.Qe   = spzeros(ftype,itype,0,0)
     M.activeEdges = Tn[]
     M.Pf   = Dict{Int64,MassMatrix{Tf,Tn}}()
-
+    clear!(M.FX) ; clear!(M.FY) ; clear!(M.FZ)
+    clear!(M.EX) ; clear!(M.EY) ; clear!(M.EZ)
+    clear!(M.NFX); clear!(M.NFY); clear!(M.NFZ)
+    clear!(M.NEX); clear!(M.NEY); clear!(M.NEZ)
+    clear!(M.NN)
+    clear!(M.NC)
     return K
 end
 
 function getMaxwellCurlCurlMatrix!(param::MaxwellTimeParam,model::MaxwellTimeModel)
-    if isempty(param.K) || model.invertMu
-        K = getMaxwellCurlCurlMatrix(param.Mesh,model.mu)
+    if isempty(param.K) || in("muCell",model.activeInversionProperties)
+        K = getMaxwellCurlCurlMatrix(param.Mesh,model.values["muCell"])
         param.K = K
     end
     return param.K
