@@ -15,7 +15,7 @@ function getSensTMatVec{Tf<:Real}(z::Vector{Tf},model::MaxwellTimeModel,
     if param.sensitivityMethod == :Explicit
         invertSigma = in("sigmaCell", model.activeInversionProperties)
         invertMu    = in(   "muCell", model.activeInversionProperties)
-        if model.invertSigma && model.invertMu
+        if invertSigma && invertMu
             error("Using explicit sensitivities while inverting sigma and mu simultaneously is not supported")
         end
         mod = invertSigma ? model.values["sigmaCell"] : model.values["muCell"]
