@@ -192,10 +192,20 @@ function getMaxwellTimeParam{S<:Real}(Mesh::AbstractMesh,
     end
 
     # Setup solvers based on input options
+    nThreads = 1;
+    try
+        nThreads = parse(Int64,ENV["OMP_NUM_THREADS"])
+    catch err
+        if typeof(err) <: KeyError
+            nThreads = 1
+        else
+            throw(err)
+        end
+    end
     if DCsolverType == :MUMPS
         DCsolver = hasMUMPS ? getMUMPSsolver([],1,0,1) : error("Unable to load MUMPS")
     elseif DCsolverType ==:Pardiso
-        DCsolver = hasPardiso ? getjInvPardisoSolver([],1,0,2,1) : error("Unable to load Pardiso")
+        DCsolver = hasPardiso ? getjInvPardisoSolver([],1,0,2,nThreads) : error("Unable to load Pardiso")
         warn("DC problem can be unstable w Pardiso for large problems")
     elseif DCsolverType == :juliaSolver
         DCsolver = getJuliaSolver(sym=1)
@@ -204,7 +214,7 @@ function getMaxwellTimeParam{S<:Real}(Mesh::AbstractMesh,
     if EMsolverType == :MUMPS
         baseEMSolver = hasMUMPS ? getMUMPSsolver([],1,0,1) : error("Unable to load MUMPS")
     elseif EMsolverType ==:Pardiso
-        baseEMSolver = hasPardiso ? getjInvPardisoSolver([],1,0,2,1) : error("Unable to load Pardiso")
+        baseEMSolver = hasPardiso ? getjInvPardisoSolver([],1,0,2,nThreads) : error("Unable to load Pardiso")
     elseif EMsolverType == :juliaSolver
         baseEMSolver = getJuliaSolver(sym=1)
     else
@@ -242,9 +252,13 @@ function getMaxwellTimeParam{S<:Real}(Mesh::AbstractMesh,
         error("Number of rows of observation matrix ($(size(Obs,1)) does not match the mesh")
     end
 
-    # Get rid of late times that are greater than observed.
+    # Get rid of late times that are greater than observed and check wave is
+    # consistent with observation times
     maxobstime = maximum(ObsTimes)
     timevalues = t0 + cumsum(dt)
+    if (maximum(timevalues) < maxobstime) || (minimum(ObsTimes) < t0)
+         error("One or more observation times outside the specified time-stepping period")
+    end
     maxidx = searchsortedfirst(timevalues, maxobstime) + 1
     deleteat!(wave, maxidx+1:length(wave))
     deleteat!(dt, maxidx:length(dt))
@@ -281,7 +295,7 @@ end
 function getObsTimeMatrix{S<:Real}(ObsTimes::Vector{S},t0::S,dt::Vector{S},
                                    nr::Integer,ns::Integer,sourceType::Symbol)
     t = sourceType == :Galvanic ? t0 + [0;cumsum(dt)] : t0 + cumsum(dt)
-    #obsIdx = [searchsortedfirst(t,ti) for ti in ObsTimes]
+
     nt = length(ObsTimes)
     interpWeights = zeros(S,nt)
     mat = spzeros(S,nt*nr*ns,length(t)*nr*ns)
