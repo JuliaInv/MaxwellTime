@@ -144,11 +144,6 @@ function getSensMatVecBE{Tf<:Real}(x::MaxwellTimeModel{Tf},
         Mmu       = Nf'*Mmu*Nf
         DmuinvDmu = spdiagm(-1./(mu.^2))
     end
-    if param.storageLevel == :None
-        K = getMaxwellCurlCurlMatrix!(param,model)
-    else
-        K = spzeros(Tf,Tn,0,0)
-    end
 
     if invertMu & (length(mu)>3*Mesh.nc)
         error("MaxwellTime:getSensMatVec: Inverting fully anisotropic mu not supported")
@@ -206,7 +201,7 @@ function getSensMatVecBE{Tf<:Real}(x::MaxwellTimeModel{Tf},
         # Form A when needed. It is not stored or formed if
         # param.storageLevel == :Factors
         if ( (i==1) || (dt[i] != dt[i-1]) )
-            A,iSolver = getBEMatrix!(dt[i],A,K,Msig,param,uniqueSteps)
+            A,iSolver = getBEMatrix!(dt[i],model,Msig,param,uniqueSteps)
         end
         rhs = (1/dt[i])*(Msig*lam)
         if invertSigma
@@ -370,7 +365,7 @@ function getSensMatVecBDF2{Tf<:Real}(x::MaxwellTimeModel{Tf},
     end
     uniqueSteps = unique(dt)
     A           = speye(Tf,Tn,size(Ne,2)) # spzeros(T,0,0)
-    A,iSolver   = getBDF2ConstDTmatrix!(dt[1],A,K,Msig,param,uniqueSteps)
+    A,iSolver   = getBDF2ConstDTmatrix!(dt[1],model,Msig,param,uniqueSteps)
     for j = 1:ns
         Gzi                 = 3/(2*dt[1])*Ne'*getdEdgeMassMatrix(Mesh,sigma,Ne*(ehat[:,j]-ew[:,j,1]))
         rhs                 = Gzi*x.values["sigmaCell"] + 3/(2*dt[1])*Msig*lam[:,j,1]
@@ -385,7 +380,7 @@ function getSensMatVecBDF2{Tf<:Real}(x::MaxwellTimeModel{Tf},
     #Do the rest of the time-steps
     for i=2:nt
         if dt[i] != dt[i-1]
-            A,iSolver = getBDF2ConstDTmatrix!(dt[i],A,K,Msig,param,uniqueSteps)
+            A,iSolver = getBDF2ConstDTmatrix!(dt[i],model,Msig,param,uniqueSteps)
             if EMsolvers[iSolver].doClear == 1
                 clear!(EMsolvers[iSolver])
                 EMsolvers[iSolver].Ainv = hasMUMPS ? factorMUMPS(A,1) : cholfact(A)
@@ -495,11 +490,6 @@ function getSensMatVecBDF2ConstDT{Tf<:Real}(x::MaxwellTimeModel{Tf},
         Curl = spzeros(Tf,Tn,0,0)
         Mmu  = spzeros(Tf,Tn,0,0)
     end
-    if param.storageLevel == :None
-        K = getMaxwellCurlCurlMatrix!(param,model)
-    else
-        K = spzeros(Tf,Tn,0,0)
-    end
 
     #Initialize intermediate and output arrays
     ns = size(s,2)
@@ -543,7 +533,7 @@ function getSensMatVecBDF2ConstDT{Tf<:Real}(x::MaxwellTimeModel{Tf},
     end
     uniqueSteps = [dt]
     A           = speye(Tf,Tn,size(Ne,2)) #spzeros(T,0,0)
-    A,iSolver   = getBDF2ConstDTmatrix!(dt,A,K,Msig,param,uniqueSteps)
+    A,iSolver   = getBDF2ConstDTmatrix!(dt,model,Msig,param,uniqueSteps)
     for j = 1:ns
         Gzi                 = 3/(2*dt)*Ne'*getdEdgeMassMatrix(M,sigma,Ne*(ehat[:,j]-ew[:,j,1]))
         rhs                 = Gzi*x.values["sigmaCell"] + 3/(2*dt)*Msig*lam[:,j,1]
