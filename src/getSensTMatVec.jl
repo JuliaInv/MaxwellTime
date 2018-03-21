@@ -101,11 +101,6 @@ function getSensTMatVecBE{Tf<:Real}(z::Vector{Tf},model::MaxwellTimeModel,
         nfcurllam   = zeros(Tf,size(Mesh.Nf,1))
         Gzitnfcurllam = zeros(Tf,size(DmuinvDmu,2))
     end
-    if param.storageLevel == :None
-        K = getMaxwellCurlCurlMatrix!(param,model)
-    else
-        K = spzeros(Tf,Tn,0,0)
-    end
 
     #Initialize intermediate and output arrays
     ns  = size(s,2)
@@ -153,7 +148,7 @@ function getSensTMatVecBE{Tf<:Real}(z::Vector{Tf},model::MaxwellTimeModel,
 
     for i=length(dt)-1:-1:1
         if dt[i] != dtLast
-            A,iSolver = getBEMatrix!(dt[i],A,K,Msig,param,uniqueSteps)
+            A,iSolver = getBEMatrix!(dt[i],model,Msig,param,uniqueSteps)
         end
 
         ij = groundedSource ? i+1 : i
@@ -263,10 +258,10 @@ function getSensTMatVecBDF2{Tf<:Real}(z::Vector{Tf},model::MaxwellTimeModel,
     lam = zeros(Tf,ne,ns,3)
 
     #For debugging
-    Nn,Qn,   = getNodalConstraints(Mesh)
-    Gin      = getNodalGradientMatrix(Mesh)
-    G        = Qe*Gin*Nn
-    nn = size(G,2)
+    # Nn,Qn,   = getNodalConstraints(Mesh)
+    # Gin      = getNodalGradientMatrix(Mesh)
+    # G        = Qe*Gin*Nn
+    # nn = size(G,2)
     #tmp = zeros(T,nn+5*ne)
 
     # Multiply by transpose of time interpolation matrix
@@ -314,7 +309,7 @@ function getSensTMatVecBDF2{Tf<:Real}(z::Vector{Tf},model::MaxwellTimeModel,
         g2p  = 1 + tau2
         g3p  = (tau3^2)/(1+tau3)
         if (dt[i] != dt[i+1]) || (i==nt)
-            A,iSolver = getBDF2ConstDTmatrix!(dt[i],A,K,Msig,param,uniqueSteps)
+            A,iSolver = getBDF2ConstDTmatrix!(dt[i],model,Msig,param,uniqueSteps)
         end
         if (i>1) && (dt[i] != dt[i-1])
             Atr  = K + (g1/dt[i])*Msig
@@ -458,7 +453,6 @@ function getSensTMatVecBDF2ConstDT{Tf<:Real}(z::Vector{Tf},model::MaxwellTimeMod
         Curl = spzeros(Tf,Tn,0,0)
         Mmu  = spzeros(Tf,Tn,0,0)
     end
-    K = getMaxwellCurlCurlMatrix!(param,model)
 
     #Initialize intermediate and output arrays
     ns  = size(s,2)
@@ -497,7 +491,7 @@ function getSensTMatVecBDF2ConstDT{Tf<:Real}(z::Vector{Tf},model::MaxwellTimeMod
     JTv = 0
     uniqueSteps = [dt]
     A           = speye(Tf,Tn,size(Ne,2)) #spzeros(T,0,0)
-    A,iSolver   = getBDF2ConstDTmatrix!(dt,A,K,Msig,param,uniqueSteps)
+    A,iSolver   = getBDF2ConstDTmatrix!(dt,model,Msig,param,uniqueSteps)
     for i=nt:-1:2
       for j = 1:ns
         rhs = pz[:,j,i] + 1/dt*Msig*(2*lam[:,j,2]-0.5*lam[:,j,3])

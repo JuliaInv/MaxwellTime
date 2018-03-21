@@ -272,19 +272,20 @@ function getMaxwellTimeParam{S<:Real}(Mesh::AbstractMesh,
     Tn = eltype(Mesh.S.SV.nzval)
     K  = spzeros(S,Tn,0,0)
     if sourceType == :InductiveLoopPotential
-        warn("Inductive loop potential seems to be broken and doesn't support non-vacuum susceptibility")
-        K = getMaxwellCurlCurlMatrix(Mesh,fill(pi*4e-7,Mesh.nc))
-        #println("Is returned to getParam as type $(typeof(K))")
-
-        if sourceType != :Galvanic
-            clear!(Mesh.FX) ; clear!(Mesh.FY) ; clear!(Mesh.FZ)
-            clear!(Mesh.EX) ; clear!(Mesh.EY) ; clear!(Mesh.EZ)
-            clear!(Mesh.NFX); clear!(Mesh.NFY); clear!(Mesh.NFZ)
-            clear!(Mesh.NEX); clear!(Mesh.NEY); clear!(Mesh.NEZ)
-            clear!(Mesh.NN)
-        end
-        clear!(Mesh.NC)
-        s = -0.5*K*s
+        error("InductiveLoopPotential source support currently broken")
+        # warn("Inductive loop potential seems to be broken and doesn't support non-vacuum susceptibility")
+        # K = getMaxwellCurlCurlMatrix(Mesh,fill(pi*4e-7,Mesh.nc))
+        # #println("Is returned to getParam as type $(typeof(K))")
+        #
+        # if sourceType != :Galvanic
+        #     clear!(Mesh.FX) ; clear!(Mesh.FY) ; clear!(Mesh.FZ)
+        #     clear!(Mesh.EX) ; clear!(Mesh.EY) ; clear!(Mesh.EZ)
+        #     clear!(Mesh.NFX); clear!(Mesh.NFY); clear!(Mesh.NFZ)
+        #     clear!(Mesh.NEX); clear!(Mesh.NEY); clear!(Mesh.NEZ)
+        #     clear!(Mesh.NN)
+        # end
+        # clear!(Mesh.NC)
+        # s = -0.5*K*s
     end
 
     return MaxwellTimeParam(Mesh,s,P,ObsTimeMat,t0,dt,wave,sourceType,storageLevel,

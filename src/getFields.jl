@@ -9,7 +9,7 @@
 
 import JOcTree.MassMatrix
 
-function getFieldsBE{T,N}(K::SparseMatrixCSC{T,N},
+function getFieldsBE{T,N}(model::MaxwellTimeModel,
                           Msig::SparseMatrixCSC{T,N},
                           s::AbstractArray{T},
                           param::MaxwellTimeParam)
@@ -43,7 +43,7 @@ function getFieldsBE{T,N}(K::SparseMatrixCSC{T,N},
         rhs = dtinv*(Msig*ew[:,:,i]+(wave[i]-wave[i+1])*s)
         # Matrix only changes when the step-size changes
         if ( (i==1) || (dt[i] != dt[i-1]) )
-            A,iSolver = getBEMatrix!(dt[i],A,K,Msig,param,uniqueSteps)
+            A,iSolver = getBEMatrix!(dt[i],model,Msig,param,uniqueSteps)
             #println("Matrix for new factorization is $(typeof(A))")
         end
         # Solve the e-field update system. Msig and M left as inputs
@@ -63,7 +63,7 @@ end
 
 #------------------------------------------------------------------------
 
-function getFieldsBDF2{T,N}(K::SparseMatrixCSC{T,N},
+function getFieldsBDF2{T,N}(model::MaxwellTimeModel,
                             Msig::SparseMatrixCSC{T,N},
                             s::AbstractArray{T},
                             param::MaxwellTimeParam)
@@ -89,7 +89,7 @@ function getFieldsBDF2{T,N}(K::SparseMatrixCSC{T,N},
     end
     uniqueSteps          = Vector{T}()
     A                    = spzeros(T,N,0,0)
-    A,iSolver            = getBDF2ConstDTmatrix!(dt[1],A,K,Msig,param,uniqueSteps)
+    A,iSolver            = getBDF2ConstDTmatrix!(dt[1],model,Msig,param,uniqueSteps)
     rhs                  = 3/(2*dt[1])*( Msig*ew[:,:,1] + (wave[1]-wave[2])*s )
     ehat,EMsolvers[1]    = solveMaxTimeBDF2ConstDT!(A,rhs,Msig,Mesh,2/(3*dt[1]),EMsolvers[1])
     EMsolvers[1].doClear = 0
@@ -101,9 +101,10 @@ function getFieldsBDF2{T,N}(K::SparseMatrixCSC{T,N},
 
 
     # Do the time-stepping
+    K = getMaxwellCurlCurlMatrix!(param,model)
     for i=2:nt
         if dt[i] != dt[i-1]
-            A,iSolver = getBDF2ConstDTmatrix!(dt[i],A,K,Msig,param,uniqueSteps)
+            A,iSolver = getBDF2ConstDTmatrix!(dt[i],model,Msig,param,uniqueSteps)
             if EMsolvers[iSolver].doClear == 1
                 clear!(EMsolvers[iSolver])
                 EMsolvers[iSolver].Ainv = hasMUMPS ? factorMUMPS(A,1) : cholfact(A)
@@ -145,8 +146,7 @@ end
 
 #------------------------------------------------------------------------
 
-function getFieldsBDF2ConstDT{T,N}(K::SparseMatrixCSC{T,N},
-                                   Msig::SparseMatrixCSC{T,N},
+function getFieldsBDF2ConstDT{T,N}(model,Msig::SparseMatrixCSC{T,N},
                                    s::AbstractArray{T},
                                    param::MaxwellTimeParam)
 
@@ -165,6 +165,7 @@ function getFieldsBDF2ConstDT{T,N}(K::SparseMatrixCSC{T,N},
     # two BE steps to get to t=4dt/3 and then we use element-wise linear
     # interpolation to compute electric field at t=dt
     EMsolver.doClear = 1
+    K                = getMaxwellCurlCurlMatrix!(param,model)
     A                = K + 3/(2*dt)*Msig
     rhs              = 3/(2*dt)*( Msig*ew[:,:,1] + (wave[1]-wave[2])*s )
     ehat,EMsolver    = solveMaxTimeBDF2ConstDT!(A,rhs,Msig,M,2/(3*dt),EMsolver)
@@ -279,7 +280,7 @@ function getFieldsDC{T,N}(Msig::SparseMatrixCSC{T,N},
     solver.doClear = 1
 
     G      = getNodalGradientMatrix(M)
-    Nn,Qn, = getNodalConstraints(M)
+    Nn,    = getNodalConstraints(M)
     Ne,Qe, = getEdgeConstraints(M)
     G      = Qe*G*Nn
     Adc    = G'*Msig*G
@@ -316,7 +317,9 @@ function getDCmatrix{T<:Real,N}(Msig::SparseMatrixCSC{T,N},G::SparseMatrixCSC{T,
     return A
 end
 
-function getMaxwellCurlCurlMatrix(M::AbstractMesh,mu)
+function _getMaxwellCurlCurlMatrix(param::MaxwellTimeParam,model::MaxwellTimeModel)
+    M      = param.Mesh
+    mu     = model.values["muCell"]
     Curl   = getCurlMatrix(M)
     Tf     = eltype(Curl)
     Tn     = eltype(Curl.colptr)
@@ -327,39 +330,42 @@ function getMaxwellCurlCurlMatrix(M::AbstractMesh,mu)
     Curl   = Qf*Curl*Ne
     Mmu    = Nf'*Mmu*Nf
     K      = Curl'*Mmu*Curl
-    #println("get func says type is $(typeof(K))")
+
     # Clear temporary arrays we don't need anymore
-    M.Curl = spzeros(Tf,Tn,0,0)
-    M.Nf   = spzeros(Tf,Tn,0,0)
-    M.Qf   = spzeros(Tf,Tn,0,0)
-    M.activeFaces = Tn[]
-    #sM.Qe   = spzeros(ftype,itype,0,0)
-    M.activeEdges = Tn[]
-    M.Pf   = Dict{Int64,MassMatrix{Tf,Tn}}()
-    clear!(M.FX) ; clear!(M.FY) ; clear!(M.FZ)
-    clear!(M.EX) ; clear!(M.EY) ; clear!(M.EZ)
-    clear!(M.NFX); clear!(M.NFY); clear!(M.NFZ)
-    clear!(M.NEX); clear!(M.NEY); clear!(M.NEZ)
-    clear!(M.NN)
-    clear!(M.NC)
+    if in("muCell",model.activeInversionProperties)
+        clear!(M.FX) ; clear!(M.FY) ; clear!(M.FZ)
+        clear!(M.EX) ; clear!(M.EY) ; clear!(M.EZ)
+        clear!(M.NFX); clear!(M.NFY); clear!(M.NFZ)
+        clear!(M.NEX); clear!(M.NEY); clear!(M.NEZ)
+        clear!(M.NN)
+        clear!(M.NC)
+        M.activeEdges = Tn[]
+    else
+        exclude = param.sourceType == :Galvanic ? [:Pe,:Ne,:Qe,:Nn,:Qn] : [:Pe,:Ne]
+        clear!(M,exclude=exclude)
+    end
     return K
 end
 
 function getMaxwellCurlCurlMatrix!(param::MaxwellTimeParam,model::MaxwellTimeModel)
     if isempty(param.K) || in("muCell",model.activeInversionProperties)
-        K = getMaxwellCurlCurlMatrix(param.Mesh,model.values["muCell"])
+        K = _getMaxwellCurlCurlMatrix(param,model)
         param.K = K
     end
     return param.K
 end
 
-function getBEMatrix!{T,N}(dt::T,A::SparseMatrixCSC{T,N},
-                           K::SparseMatrixCSC{T,N},Msig::SparseMatrixCSC{T,N},
-                           param::MaxwellTimeParam,uniqueSteps::Vector{T})
+function getBEMatrix!{T,N}(dt::T,
+                           model::MaxwellTimeModel,
+                           Msig::SparseMatrixCSC{T,N},
+                           param::MaxwellTimeParam,
+                           uniqueSteps::Vector{T})
 
     storageLevel = param.storageLevel
+    A = spzeros(T,N,0,0)
     if ~in(dt,uniqueSteps)
         push!(uniqueSteps,dt)
+        K = getMaxwellCurlCurlMatrix!(param,model)
         A = K + (1/dt)*Msig
         if storageLevel == :Matrices
             push!(param.Matrices,A)
@@ -380,6 +386,7 @@ function getBEMatrix!{T,N}(dt::T,A::SparseMatrixCSC{T,N},
             param.EMsolvers[1].doClear = 1
         else
             iSolver = 1
+            K       = getMaxwellCurlCurlMatrix!(param,model)
             A       = K + (1/dt)*Msig
             param.EMsolvers[1].doClear = 1
         end
@@ -387,13 +394,15 @@ function getBEMatrix!{T,N}(dt::T,A::SparseMatrixCSC{T,N},
     return A,iSolver
 end
 
-function getBDF2ConstDTmatrix!{T,N}(dt::T,A::SparseMatrixCSC{T,N},
-                           K::SparseMatrixCSC{T,N},Msig::SparseMatrixCSC{T,N},
+function getBDF2ConstDTmatrix!{T,N}(dt::T,model::MaxwellTimeModel,
+                           Msig::SparseMatrixCSC{T,N},
                            param::MaxwellTimeParam,uniqueSteps::Vector{T})
 
     storageLevel = param.storageLevel
+    A = spzeros(T,N,0,0)
     if ~in(dt,uniqueSteps)
         push!(uniqueSteps,dt)
+        K = getMaxwellCurlCurlMatrix!(param,model)
         A = K + 3/(2*dt)*Msig
         if storageLevel == :Matrices
             push!(param.Matrices,A)
@@ -414,6 +423,7 @@ function getBDF2ConstDTmatrix!{T,N}(dt::T,A::SparseMatrixCSC{T,N},
             param.EMsolvers[1].doClear = 1
         else
             iSolver = 1
+            K       = getMaxwellCurlCurlMatrix!(param,model)
             A       = K + 3/(2*dt)*Msig
             param.EMsolvers[1].doClear = 1
         end

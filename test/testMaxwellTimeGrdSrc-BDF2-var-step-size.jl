@@ -71,14 +71,14 @@ ehat   = pFor.AuxFields
 
 #Form sensitivity matrix and related quantities
 println("Forming sensitivity matrix")
-mu    = 4*pi*1e-7  # magnetic permeability
-Curl  = getCurlMatrix(Msh)
-G     = getNodalGradientMatrix(Msh)
-Msig  = getEdgeMassMatrix(Msh,vec(sigma))
-Mmu   = getFaceMassMatrix(Msh,vec(zeros(size(sigma)).+1/mu))
-Ne,Qe = getEdgeConstraints(Msh)
-Nn,Qn = getNodalConstraints(Msh)
-Nf,Qf = getFaceConstraints(Msh)
+mu     = 4*pi*1e-7  # magnetic permeability
+Curl   = getCurlMatrix(Msh)
+G      = getNodalGradientMatrix(Msh)
+Msig   = getEdgeMassMatrix(Msh,vec(sigma))
+Mmu    = getFaceMassMatrix(Msh,vec(zeros(size(sigma)).+1/mu))
+Ne,Qe, = getEdgeConstraints(Msh)
+Nn,Qn, = getNodalConstraints(Msh)
+Nf,Qf, = getFaceConstraints(Msh)
 
 Curl = Qf*Curl*Ne
 Msig = Ne'*Msig*Ne

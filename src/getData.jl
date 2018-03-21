@@ -76,22 +76,17 @@ function getData(model::MaxwellTimeModel,param::MaxwellTimeParam,doClear::Bool=f
     Msig   = getEdgeMassMatrix(M,sigma)
     Msig   = Ne'*Msig*Ne
 
-    # Form K = Curl'*Mmu*Curl
-    K = getMaxwellCurlCurlMatrix!(param,model)
-
     # Initialize electric field storage
     ne            = size(Ne,2) #Number of active edges
     ns            = size(s,2)
     nt            = length(dt)+1
-
 
     if !isdefined(param,:fields) || size(param.fields) != (ne,ns,nt)
        param.fields  = zeros(Float64,ne,ns,nt)
     else
        fill!(param.fields, 0.0)
     end
-
-    e             = param.fields
+    e = param.fields
 
     # Initialize matrix storage if needed. Note that if a direct solver is
     # being used and factorizatons are being stored, then matrices don't
@@ -113,7 +108,7 @@ function getData(model::MaxwellTimeModel,param::MaxwellTimeParam,doClear::Bool=f
     # symbols to their corresponding getTransientFields<IntegrationMethod>
     # functions.
     getTransientFields  = integrationFunctions[param.timeIntegrationMethod]
-    param               = getTransientFields(K,Msig,s,param)
+    param               = getTransientFields(model,Msig,s,param)
 
 
     # Compute the data from the fields, at the times the fields
