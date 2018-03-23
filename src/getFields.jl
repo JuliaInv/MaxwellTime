@@ -312,7 +312,7 @@ function getDCmatrix{T<:Real,N}(Msig::SparseMatrixCSC{T,N},G::SparseMatrixCSC{T,
     elseif storageLevel == :None
         A   = G'*Msig*G
     else
-        A = spzeros(0) # Empty sparse matrix placeholder argument
+        A = spzeros(T,N,0,0) # Empty sparse matrix placeholder argument
     end
     return A
 end
@@ -362,7 +362,7 @@ function getBEMatrix!{T,N}(dt::T,
                            uniqueSteps::Vector{T})
 
     storageLevel = param.storageLevel
-    A = spzeros(T,N,0,0)
+    A = speye(T,N,size(Msig,1))
     if ~in(dt,uniqueSteps)
         push!(uniqueSteps,dt)
         K = getMaxwellCurlCurlMatrix!(param,model)
@@ -399,7 +399,7 @@ function getBDF2ConstDTmatrix!{T,N}(dt::T,model::MaxwellTimeModel,
                            param::MaxwellTimeParam,uniqueSteps::Vector{T})
 
     storageLevel = param.storageLevel
-    A = spzeros(T,N,0,0)
+    A = speye(T,N,size(Msig,1))
     if ~in(dt,uniqueSteps)
         push!(uniqueSteps,dt)
         K = getMaxwellCurlCurlMatrix!(param,model)
