@@ -318,7 +318,7 @@ end
 
 import Base.clear!
 function clear!(param::MaxwellTimeParam)
-    pFor.Fields = Array{Float64}(0)
+    param.Fields = Array{Float64}(0)
     clear!(param.DCsolver)
     for solver in param.EMsolvers
         clear!(solver)
