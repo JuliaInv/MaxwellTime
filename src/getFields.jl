@@ -39,6 +39,7 @@ function getFieldsBE{T,N}(model::MaxwellTimeModel,
     uniqueSteps = Vector{eltype(dt)}()
     A           = spzeros(T,N,0,0)
     for i=1:length(dt)
+        param.verbosity < 2 || println("Starting time step $i of $(length(dt))")
         dtinv = 1.0/dt[i]
         rhs = dtinv*(Msig*ew[:,:,i]+(wave[i]-wave[i+1])*s)
         # Matrix only changes when the step-size changes
@@ -365,6 +366,10 @@ function getBEMatrix!{T,N}(dt::T,
     A = speye(T,N,size(Msig,1))
     if ~in(dt,uniqueSteps)
         push!(uniqueSteps,dt)
+        if param.verbosity > 0
+            iStep = length(uniqueSteps)
+            println("Starting factorization $iStep")
+        end
         K = getMaxwellCurlCurlMatrix!(param,model)
         A = K + (1/dt)*Msig
         if storageLevel == :Matrices

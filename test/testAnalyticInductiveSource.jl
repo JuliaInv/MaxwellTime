@@ -1,5 +1,3 @@
-
-
 using MaxwellTime
 using JOcTree
 using PyPlot

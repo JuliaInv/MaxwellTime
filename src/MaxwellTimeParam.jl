@@ -19,6 +19,7 @@ mutable struct MaxwellTimeParam{Tf<:Real,Tn<:Integer,TSem<:AbstractSolver,TSdc<:
     EMsolvers::Vector{TSem}
     DCsolver::TSdc
     modUnits::Symbol
+    verbosity::Integer
     K::SparseMatrixCSC{Tf,Tn}
     Matrices::Vector{SparseMatrixCSC}
     fields::Array{Float64}
@@ -48,12 +49,13 @@ mutable struct MaxwellTimeParam{Tf<:Real,Tn<:Integer,TSem<:AbstractSolver,TSdc<:
                      ObsTimes::AbstractArray{Tf},t0::Tf,dt::Vector{Tf},wave::Vector{Tf},sourceType::Symbol,
                      storageLevel::Symbol,sensitivityMethod::Symbol,
                      timeIntegrationMethod::Symbol,EMsolvers::Vector{TSem},
-                     DCsolver::TSdc,modUnits::Symbol,K::SparseMatrixCSC{Tf,Tn}) where
-                     {Tf<:Real,Tn<:Integer,TSem<:AbstractSolver,TSdc<:AbstractSolver} = new(
+                     DCsolver::TSdc,modUnits::Symbol,verbosity::Integer,
+                     K::SparseMatrixCSC{Tf,Tn}) where {Tf<:Real,Tn<:Integer,
+                       TSem<:AbstractSolver,TSdc<:AbstractSolver} = new(
                                      Mesh,Sources,Obs,ObsTimes,t0,dt,wave,
                                      sourceType,storageLevel,sensitivityMethod,
                                      timeIntegrationMethod,
-                                     EMsolvers,DCsolver,modUnits,K)
+                                     EMsolvers,DCsolver,modUnits,verbosity,K)
 end
 
 # Unfortunately parametric types need these matching outer and inner constructors
@@ -73,14 +75,14 @@ MaxwellTimeParam{Tf,Tn,TSem,TSdc}(Mesh::AbstractMesh,Sources::AbstractArray{Tf},
 	                 ObsTimes::AbstractArray{Tf},t0::Tf,dt::Vector{Tf},wave::Vector{Tf},sourceType::Symbol,
 	                 storageLevel::Symbol,sensitivityMethod::Symbol,
 	                 timeIntegrationMethod::Symbol,EMsolvers::Vector{TSem},
-	                 DCsolver::TSdc,modUnits::Symbol,
+	                 DCsolver::TSdc,modUnits::Symbol,verbosity::Integer,
                      K::SparseMatrixCSC{Tf,Tn}) = MaxwellTimeParam{Tf,Tn,TSem,TSdc}(
 	                                                 Mesh,Sources,Obs,ObsTimes,t0,dt,wave,
 	                                                 sourceType,storageLevel,
 	                                                 sensitivityMethod,
                                                      timeIntegrationMethod,
                                                      EMsolvers,DCsolver,
-                                                     modUnits,K)
+                                                     modUnits,verbosity,K)
 
 # Supported options for categorical settings. See getMaxwellTimeParam
 # docstring below for documentation.
@@ -161,6 +163,11 @@ Input:  Mandatory arguments:
         DCsolverType::Symbol - Solver for DC problem for galvanic sources.
                                Same options as EMSolverType.
 
+        verbosity::Integer   - Level of progress report messages. 0 for no
+                               output, 1 for output at each new factorization,
+                               2 for output at each time step. Default is 0.
+
+
 
 
 """
@@ -177,7 +184,8 @@ function getMaxwellTimeParam{S<:Real}(Mesh::AbstractMesh,
 			                         timeIntegrationMethod::Symbol=:BE,
 			                         EMsolverType::Symbol=defaultSolver,
 			                         DCsolverType::Symbol=defaultSolver,
-                                     modUnits::Symbol=:con)
+                                     modUnits::Symbol=:con,
+                                     verbosity::Integer=0)
 
     # Check that user has chosen valid settings for categorical options
     in(timeIntegrationMethod,supportedIntegrationMethods) || error("Unsupported integration method")
@@ -271,26 +279,26 @@ function getMaxwellTimeParam{S<:Real}(Mesh::AbstractMesh,
     # Apply K to source if using inductive loop potential.
     Tn = eltype(Mesh.S.SV.nzval)
     K  = spzeros(S,Tn,0,0)
-    if sourceType == :InductiveLoopPotential
-        error("InductiveLoopPotential source support currently broken")
-        # warn("Inductive loop potential seems to be broken and doesn't support non-vacuum susceptibility")
-        # K = getMaxwellCurlCurlMatrix(Mesh,fill(pi*4e-7,Mesh.nc))
-        # #println("Is returned to getParam as type $(typeof(K))")
-        #
-        # if sourceType != :Galvanic
-        #     clear!(Mesh.FX) ; clear!(Mesh.FY) ; clear!(Mesh.FZ)
-        #     clear!(Mesh.EX) ; clear!(Mesh.EY) ; clear!(Mesh.EZ)
-        #     clear!(Mesh.NFX); clear!(Mesh.NFY); clear!(Mesh.NFZ)
-        #     clear!(Mesh.NEX); clear!(Mesh.NEY); clear!(Mesh.NEZ)
-        #     clear!(Mesh.NN)
-        # end
-        # clear!(Mesh.NC)
-        # s = -0.5*K*s
-    end
+    # if sourceType == :InductiveLoopPotential
+    #     error("InductiveLoopPotential source support currently broken")
+    #     # warn("Inductive loop potential seems to be broken and doesn't support non-vacuum susceptibility")
+    #     # K = getMaxwellCurlCurlMatrix(Mesh,fill(pi*4e-7,Mesh.nc))
+    #     # #println("Is returned to getParam as type $(typeof(K))")
+    #     #
+    #     # if sourceType != :Galvanic
+    #     #     clear!(Mesh.FX) ; clear!(Mesh.FY) ; clear!(Mesh.FZ)
+    #     #     clear!(Mesh.EX) ; clear!(Mesh.EY) ; clear!(Mesh.EZ)
+    #     #     clear!(Mesh.NFX); clear!(Mesh.NFY); clear!(Mesh.NFZ)
+    #     #     clear!(Mesh.NEX); clear!(Mesh.NEY); clear!(Mesh.NEZ)
+    #     #     clear!(Mesh.NN)
+    #     # end
+    #     # clear!(Mesh.NC)
+    #     # s = -0.5*K*s
+    # end
 
     return MaxwellTimeParam(Mesh,s,P,ObsTimeMat,t0,dt,wave,sourceType,storageLevel,
                             sensitivityMethod,timeIntegrationMethod,
-                            EMsolvers,DCsolver,modUnits,K)
+                            EMsolvers,DCsolver,modUnits,verbosity,K)
 end
 
 function getObsTimeMatrix{S<:Real}(ObsTimes::Vector{S},t0::S,dt::Vector{S},

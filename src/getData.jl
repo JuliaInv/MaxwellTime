@@ -98,6 +98,7 @@ function getData(model::MaxwellTimeModel,param::MaxwellTimeParam,doClear::Bool=f
 
     # Get initial fields. They're zero for inductive sources
     if sourceType == :Galvanic
+        param.verbosity == 0 || println("Computing initial fields")
         param = getFieldsDC(Msig,s,param)
     end
 
