@@ -20,11 +20,11 @@ mutable struct MaxwellTimeParam{Tf<:Real,Tn<:Integer,TSem<:AbstractSolver,TSdc<:
     DCsolver::TSdc
     modUnits::Symbol
     verbosity::Integer
+    cgTol::Tf  #Only used by BDF2. Tolerance for cg solves used when stepsize changes
     K::SparseMatrixCSC{Tf,Tn}
     Matrices::Vector{SparseMatrixCSC}
     fields::Array{Float64}
     Sens::Array{Tf}
-    cgTol::Tf  #Only used by BDF2. Tolerance for cg solves used when stepsize changes
     AuxFields::Array{Tf} # Stores extra electric fields outside
                         # of regular time-stepping. Currently used
                         # to initialize BDF2 time stepping without additional BE
@@ -50,12 +50,13 @@ mutable struct MaxwellTimeParam{Tf<:Real,Tn<:Integer,TSem<:AbstractSolver,TSdc<:
                      storageLevel::Symbol,sensitivityMethod::Symbol,
                      timeIntegrationMethod::Symbol,EMsolvers::Vector{TSem},
                      DCsolver::TSdc,modUnits::Symbol,verbosity::Integer,
-                     K::SparseMatrixCSC{Tf,Tn}) where {Tf<:Real,Tn<:Integer,
+                     cgTol::Tf,K::SparseMatrixCSC{Tf,Tn}) where {Tf<:Real,Tn<:Integer,
                        TSem<:AbstractSolver,TSdc<:AbstractSolver} = new(
                                      Mesh,Sources,Obs,ObsTimes,t0,dt,wave,
                                      sourceType,storageLevel,sensitivityMethod,
                                      timeIntegrationMethod,
-                                     EMsolvers,DCsolver,modUnits,verbosity,K)
+                                     EMsolvers,DCsolver,modUnits,verbosity,cgTol,
+                                     K)
 end
 
 # Unfortunately parametric types need these matching outer and inner constructors
@@ -76,13 +77,13 @@ MaxwellTimeParam{Tf,Tn,TSem,TSdc}(Mesh::AbstractMesh,Sources::AbstractArray{Tf},
 	                 storageLevel::Symbol,sensitivityMethod::Symbol,
 	                 timeIntegrationMethod::Symbol,EMsolvers::Vector{TSem},
 	                 DCsolver::TSdc,modUnits::Symbol,verbosity::Integer,
-                     K::SparseMatrixCSC{Tf,Tn}) = MaxwellTimeParam{Tf,Tn,TSem,TSdc}(
+                     cgTol::Tf,K::SparseMatrixCSC{Tf,Tn}) = MaxwellTimeParam{Tf,Tn,TSem,TSdc}(
 	                                                 Mesh,Sources,Obs,ObsTimes,t0,dt,wave,
 	                                                 sourceType,storageLevel,
 	                                                 sensitivityMethod,
                                                      timeIntegrationMethod,
                                                      EMsolvers,DCsolver,
-                                                     modUnits,verbosity,K)
+                                                     modUnits,verbosity,cgTol,K)
 
 # Supported options for categorical settings. See getMaxwellTimeParam
 # docstring below for documentation.
@@ -185,7 +186,8 @@ function getMaxwellTimeParam{S<:Real}(Mesh::AbstractMesh,
 			                         EMsolverType::Symbol=defaultSolver,
 			                         DCsolverType::Symbol=defaultSolver,
                                      modUnits::Symbol=:con,
-                                     verbosity::Integer=0)
+                                     verbosity::Integer=0,
+                                     cgTol::S=1e-14)
 
     # Check that user has chosen valid settings for categorical options
     in(timeIntegrationMethod,supportedIntegrationMethods) || error("Unsupported integration method")
@@ -298,7 +300,7 @@ function getMaxwellTimeParam{S<:Real}(Mesh::AbstractMesh,
 
     return MaxwellTimeParam(Mesh,s,P,ObsTimeMat,t0,dt,wave,sourceType,storageLevel,
                             sensitivityMethod,timeIntegrationMethod,
-                            EMsolvers,DCsolver,modUnits,verbosity,K)
+                            EMsolvers,DCsolver,modUnits,verbosity,cgTol,K)
 end
 
 function getObsTimeMatrix{S<:Real}(ObsTimes::Vector{S},t0::S,dt::Vector{S},
