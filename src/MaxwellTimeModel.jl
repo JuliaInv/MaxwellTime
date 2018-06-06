@@ -69,7 +69,7 @@ end
 
 function *{T<:Real}(D::MaxwellTimeModelDerivative, x::Vector{T})
     values = Dict{String,Vector{T}}()
-    for key in keys(D.mats)
+    for key in D.activeInversionProperties
         values[key] = D.mats[key]*x
     end
     MaxwellTimeModel(values,D.activeInversionProperties)
@@ -79,7 +79,7 @@ function Ac_mul_B(D::MaxwellTimeModelDerivative, y::MaxwellTimeModel)
     key1 = first(keys(D.mats))
     T    = eltype(D.mats[key1])
     xOut = zeros(T,size(D.mats[key1],2))
-    for key in keys(D.mats)
+    for key in D.activeInversionProperties
         xOut += D.mats[key]'*y.values[key]
     end
     return xOut

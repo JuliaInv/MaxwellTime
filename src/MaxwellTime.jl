@@ -1,3 +1,5 @@
+__precompile__()
+
 module MaxwellTime
 
 using jInv.Mesh.AbstractMesh
