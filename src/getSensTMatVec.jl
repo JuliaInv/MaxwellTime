@@ -315,13 +315,14 @@ function getSensTMatVecBDF2{Tf<:Real}(z::Vector{Tf},model::MaxwellTimeModel,
             Atr  = K + (g1/dt[i])*Msig
             if EMsolvers[iSolver].doClear == 1
                 clear!(EMsolvers[iSolver])
-                EMsolvers[iSolver].Ainv = hasMUMPS ? factorMUMPS(A,1) : cholfact(A)
+                factorLinearSystem!(A,EMsolvers[iSolver])
                 EMsolvers[iSolver].doClear = 0
             end
-            M = Y -> begin
-                         Y = hasMUMPS ? applyMUMPS(EMsolvers[iSolver].Ainv,Y) : EMsolvers[iSolver].Ainv\Y
-                         return Y
-                     end
+            M(X) = solveLinearSystem!(A,X,similar(X),EMsolvers[iSolver])[1]
+            # M = Y -> begin
+            #              Y = hasMUMPS ? applyMUMPS(EMsolvers[iSolver].Ainv,Y) : EMsolvers[iSolver].Ainv\Y
+            #              return Y
+            #          end
         end
         for j = 1:ns
             rhs  = pz[:,j,i] + Msig*(g2p*lam[:,j,2]/dt[i+1]-g3p*lam[:,j,3]/dt[i+2])

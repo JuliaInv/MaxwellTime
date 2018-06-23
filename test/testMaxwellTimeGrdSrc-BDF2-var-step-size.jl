@@ -46,10 +46,11 @@ dt0     = 1e-4
 nt      = 4
 #dt      = dt0*ones(nt)
 dt      = dt0*cumprod([1.0;1.25*ones(nt-1)])
+# dt      = [dt[1]*ones(3);dt[2]*ones(3);dt[3]*ones(3);dt[4]*ones(3);]
 #dt       = dt0*[1.0;1.0;1.0;1.25^2]
 t       = [0;cumsum(dt)]
 t0      = t[1]
-wave    = zeros(nt+1)
+wave    = zeros(length(dt)+1)
 wave[1] = 1.0
 #
 # #Random model
@@ -62,7 +63,8 @@ sourceType            = :Galvanic
 timeIntegrationMethod = :BDF2
 obsTimes              = t
 pFor                  = getMaxwellTimeParam(Msh,Sources,P',obsTimes,t0,dt,wave,sourceType,
-                                            timeIntegrationMethod=timeIntegrationMethod)
+                                            timeIntegrationMethod=timeIntegrationMethod,
+                                            EMsolverType=:Pardiso)
 pFor.cgTol = 1e-15
 println("Getting data")
 d,pFor = getData(sigma,pFor)

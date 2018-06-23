@@ -317,6 +317,10 @@ function getSensMatVecBDF2{Tf<:Real}(x::MaxwellTimeModel{Tf},
         Curl   = Qf*Curl*Ne
         Mmu    = getFaceMassMatrix(Mesh,1./mu)
         Mmu    = Nf'*Mmu*Nf
+        DmuinvDmz = -x.values["muCell"]./(mu.^2)
+        # Equivalent to
+        # DmuinvDmu = spdiagm(-1./(mu.^2))
+        # DmuinvDmz = DmuinvDmu*x.values["muCell"]
     else
         Curl = spzeros(Tf,Tn,0,0)
         Mmu  = spzeros(Tf,Tn,0,0)
@@ -350,7 +354,7 @@ function getSensMatVecBDF2{Tf<:Real}(x::MaxwellTimeModel{Tf},
                                        #Prepares for data projection and
                                        #preps lam for use as rhs in first
                                        #time-step
-            Jvdc[:,j]        = -P'*lam[:,j,1]
+            Jvdc[:,j]        = -P'*view(lam,:,j,1)
             DCsolver.doClear = 0
         end
         if param.storageLevel != :Factors
@@ -360,22 +364,40 @@ function getSensMatVecBDF2{Tf<:Real}(x::MaxwellTimeModel{Tf},
     end
 
     #Do BE and interpolation for first time-step
-    if invertMu
-        error("Inverting for mu with bdf2 time-stepping not yet supported")
-    end
     uniqueSteps = unique(dt)
     A           = speye(Tf,Tn,size(Ne,2)) # spzeros(T,0,0)
     A,iSolver   = getBDF2ConstDTmatrix!(dt[1],model,Msig,param,uniqueSteps)
+    rhs = 3/(2*dt[1])*Msig*lam[:,:,1]
     for j = 1:ns
-        Gzi                 = 3/(2*dt[1])*Ne'*getdEdgeMassMatrix(Mesh,sigma,Ne*(ehat[:,j]-ew[:,j,1]))
-        rhs                 = Gzi*x.values["sigmaCell"] + 3/(2*dt[1])*Msig*lam[:,j,1]
-        lmTmp,EMsolvers[1]      = solveMaxTimeBDF2ConstDT!(A,rhs,Msig,Mesh,dt[1],EMsolvers[1])
-        EMsolvers[1].doClear    = 0
-        Gzi                 = Ne'*getdEdgeMassMatrix(Mesh,sigma,1/dt[1]*Ne*(1.5*ew[:,j,2]-0.75*ehat[:,j]-0.75*ew[:,j,1]))
-        rhs                 = Gzi*x.values["sigmaCell"] + 3/(4*dt[1])*Msig*lam[:,j,1] + 3/(4*dt[1])*Msig*lmTmp
-        lam[:,j,2],EMsolvers[1] = solveMaxTimeBDF2ConstDT!(A,rhs,Msig,Mesh,dt[1],EMsolvers[1])
-        Jv[:,j,1]           = -P'*lam[:,j,2]
+        if invertSigma
+            @views begin rhs[:,j] .+= 3/(2*dt[1]).*(Ne'*dEdgeMassMatrixTimesVector(Mesh,sigma,
+                                  Ne*(ehat[:,j]-ew[:,j,1]),
+                                  x.values["sigmaCell"])) end
+        end
+        if invertMu
+            @views begin rhs[:,j] .+= Curl'*(Nf'*dFaceMassMatrixTimesVector(Mesh,1./mu,
+                           Nf*(Curl*ehat[:,j]),
+                           DmuinvDmz)) end
+        end
     end
+    lmTmp,EMsolvers[1]      = solveMaxTimeBDF2ConstDT!(A,rhs,Msig,Mesh,dt[1],EMsolvers[1])
+    EMsolvers[1].doClear    = 0
+
+    rhs = 3/(4*dt[1])*Msig*lam[:,:,1] + 3/(4*dt[1])*Msig*lmTmp
+    for j = 1:ns
+        if invertSigma
+            @views begin rhs[:,j] .+= Ne'*dEdgeMassMatrixTimesVector(Mesh,sigma,
+                         Ne*((1.5.*ew[:,j,2] .- 0.75.*ehat[:,j] .- 0.75.*ew[:,j,1])./dt[1]),
+                         x.values["sigmaCell"]) end
+        end
+        if invertMu
+            @views begin rhs[:,j] .+= Curl'*(Nf'*dFaceMassMatrixTimesVector(Mesh,1./mu,
+                           Nf*(Curl*ew[:,j,2]),
+                           DmuinvDmz)) end
+        end
+    end
+    lam[:,:,2],EMsolvers[1] = solveMaxTimeBDF2ConstDT!(A,rhs,Msig,Mesh,dt[1],EMsolvers[1])
+    Jv[:,:,1]               = -P'*view(lam,:,:,2)
 
     #Do the rest of the time-steps
     for i=2:nt
@@ -383,45 +405,56 @@ function getSensMatVecBDF2{Tf<:Real}(x::MaxwellTimeModel{Tf},
             A,iSolver = getBDF2ConstDTmatrix!(dt[i],model,Msig,param,uniqueSteps)
             if EMsolvers[iSolver].doClear == 1
                 clear!(EMsolvers[iSolver])
-                EMsolvers[iSolver].Ainv = hasMUMPS ? factorMUMPS(A,1) : cholfact(A)
+                factorLinearSystem!(A,EMsolvers[iSolver])
                 EMsolvers[iSolver].doClear = 0
             end
-            M = Y -> begin
-                         Y = hasMUMPS ? applyMUMPS(EMsolvers[iSolver].Ainv,Y) : EMsolvers[iSolver].Ainv\Y
-                         return Y
-                     end
+            M(X) = solveLinearSystem!(A,X,similar(X),EMsolvers[iSolver])[1]
             tau = dt[i]/dt[i-1]
             g1  = (1+2*tau)/(1+tau)
             g2  = 1 + tau
             g3  = (tau^2)/(1+tau)
             Atr = K + (g1/dt[i])*Msig
+            rhs = Msig*((g2.*lam[:,:,2].-g3.*lam[:,:,1])./dt[i])
             for j = 1:ns
-                Gzi = getdEdgeMassMatrix(Mesh,sigma,Ne*(g1*ew[:,j,i+1]-
-                       g2*ew[:,j,i]+g3*ew[:,j,i-1]))*x.values["sigmaCell"]
-                rhs = (1/dt[i])*(Ne'*Gzi +
-                      Msig*(g2*lam[:,j,2]-g3*lam[:,j,1]))
-                lam[:,j,3],cgFlag,err,iterTmp, = cg(Atr,rhs,
+                if invertSigma
+                    @views begin rhs[:,j] .+= Ne'*dEdgeMassMatrixTimesVector(Mesh,sigma,
+                                Ne*((g1.*ew[:,j,i+1].-g2.*ew[:,j,i].+g3.*ew[:,j,i-1])./dt[i]),
+                                x.values["sigmaCell"]) end
+                end
+                if invertMu
+                    @views begin rhs[:,j] .+= Curl'*(Nf'*dFaceMassMatrixTimesVector(Mesh,1./mu,
+                                   Nf*(Curl*ew[:,j,i+1]),
+                                   DmuinvDmz)) end
+                end
+                lam[:,j,3],cgFlag,err,iterTmp, = cg(Atr,rhs[:,j],
                    x=vec(lam[:,j,3]),M=M,maxIter=20,tol=param.cgTol)
                 if cgFlag != 0
                     warn("getSensMatVec: cg failed to converge at time step $i. Reached residual $err with tolerance $(param.cgTol)")
                 end
                 # compute Jv
-                Jv[:,j,i]  = -P'*(lam[:,j,3])
-                lam[:,j,1] = lam[:,j,2]
-                lam[:,j,2] = lam[:,j,3]
+                @views Jv[:,j,i]  = -P'*(lam[:,j,3])
+                @views lam[:,j,1] = lam[:,j,2]
+                @views lam[:,j,2] = lam[:,j,3]
             end
         else
+            @views rhs = Msig*((2.0.*lam[:,:,2].-0.5.*lam[:,:,1])./dt[i])
             for j = 1:ns
-
-       	        Gzi = (1/dt[i])*Ne'*getdEdgeMassMatrix(Mesh,sigma,Ne*(1.5*ew[:,j,i+1]-
-       	               2*ew[:,j,i]+0.5*ew[:,j,i-1]))
-       	        rhs = Gzi*x.values["sigmaCell"] + 1/dt[i]*Msig*(2*lam[:,j,2]-0.5*lam[:,j,1])
-       	        lam[:,j,3],EMsolvers[iSolver] = solveMaxTimeBDF2ConstDT!(A,rhs,Msig,Mesh,dt[i],EMsolvers[iSolver])
-                # compute Jv
-                Jv[:,j,i]  = -P'*(lam[:,j,3])
-                lam[:,j,1] = lam[:,j,2]
-                lam[:,j,2] = lam[:,j,3]
+                if invertSigma
+                    @views begin rhs[:,j] .+= Ne'*dEdgeMassMatrixTimesVector(Mesh,sigma,
+                                Ne*((1.5.*ew[:,j,i+1].-2.0.*ew[:,j,i].+0.5.*ew[:,j,i-1])./dt[i]),
+                                x.values["sigmaCell"]) end
+                end
+                if invertMu
+                    @views begin rhs[:,j] .+= Curl'*(Nf'*dFaceMassMatrixTimesVector(Mesh,1./mu,
+                                   Nf*(Curl*ew[:,j,i+1]),
+                                   DmuinvDmz)) end
+                end
             end
+       	    lam[:,:,3],EMsolvers[iSolver] = solveMaxTimeBDF2ConstDT!(A,rhs,Msig,Mesh,dt[i],EMsolvers[iSolver])
+            # compute Jv
+            @views Jv[:,:,i]  = -P'*(lam[:,:,3])
+            @views lam[:,:,1] = lam[:,:,2]
+            @views lam[:,:,2] = lam[:,:,3]
         end
     end
     if storageLevel != :Factors
@@ -432,7 +465,7 @@ function getSensMatVecBDF2{Tf<:Real}(x::MaxwellTimeModel{Tf},
     end
     Jv = groundedSource ? [vec(Jvdc);vec(Jv)] : vec(Jv)
     return param.ObsTimes*Jv
-    end
+end
 #-------------------------------------------------------
 
 

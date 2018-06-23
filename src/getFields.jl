@@ -81,10 +81,16 @@ function getFieldsBDF2{T,N}(model::MaxwellTimeModel,
     ew           = param.fields
 
     # BDF2 with step size dt has same matrix as backward Euler with
-    # stepsize 2dt/3. To save a factorization (we're mostly concerned
+    # stepsize 2dt/3. To save a factorization (we're concerned
     # with direct solvers here) we initialize the time-stepping by taking
     # two BE steps to get to t=4dt/3 and then we use element-wise linear
     # interpolation to compute electric field at t=dt
+    # The second linear solve is equivalent to taking a second BE step by
+    # solving A*ehat2 = 3/(2dt)*(Msig*ehat + q)
+    # and then setting ew[:,:,2] = 0.5*(ehat + ehat2)
+    # Code as written is slighty less clear but doesn't allocate extra
+    # storage for ehat2
+
     for solver in EMsolvers
       solver.doClear = 1
     end
@@ -94,9 +100,8 @@ function getFieldsBDF2{T,N}(model::MaxwellTimeModel,
     rhs                  = 3/(2*dt[1])*( Msig*ew[:,:,1] + (wave[1]-wave[2])*s )
     ehat,EMsolvers[1]    = solveMaxTimeBDF2ConstDT!(A,rhs,Msig,Mesh,2/(3*dt[1]),EMsolvers[1])
     EMsolvers[1].doClear = 0
-    rhs                  = 3/(2*dt[1])*( Msig*ehat )
-    ehat2,EMsolvers[1]   = solveMaxTimeBDF2ConstDT!(A,rhs,Msig,Mesh,2/(3*dt[1]),EMsolvers[1])
-    ew[:,:,2]            = 0.5*(ehat+ehat2)
+    rhs                  = 3/(4*dt[1])*( Msig*(ehat+ew[:,:,1]) )
+    ew[:,:,2],EMsolvers[1]   = solveMaxTimeBDF2ConstDT!(A,rhs,Msig,Mesh,2/(3*dt[1]),EMsolvers[1])
     param.AuxFields      = ehat
 
 
@@ -108,7 +113,7 @@ function getFieldsBDF2{T,N}(model::MaxwellTimeModel,
             A,iSolver = getBDF2ConstDTmatrix!(dt[i],model,Msig,param,uniqueSteps)
             if EMsolvers[iSolver].doClear == 1
                 clear!(EMsolvers[iSolver])
-                EMsolvers[iSolver].Ainv = hasMUMPS ? factorMUMPS(A,1) : cholfact(A)
+                factorLinearSystem!(A,EMsolvers[iSolver])
                 EMsolvers[iSolver].doClear = 0
             end
             tau = dt[i]/dt[i-1]
@@ -118,14 +123,15 @@ function getFieldsBDF2{T,N}(model::MaxwellTimeModel,
             Atr = K + (g1/dt[i])*Msig
             rhs = ( (-g1*wave[i+1]+g2*wave[i]-g3*wave[i-1])*s +
                              Msig*(g2*ew[:,:,i] - g3*ew[:,:,i-1]) )/dt[i]
-            M = Y -> begin
-                         Y = hasMUMPS ? applyMUMPS(EMsolvers[iSolver].Ainv,Y) : EMsolvers[iSolver].Ainv\Y
-                         return Y
-                     end
+            M(X) = solveLinearSystem!(A,X,similar(X),EMsolvers[iSolver])[1]
+            # M = Y -> begin
+            #              Y = hasMUMPS ? applyMUMPS(EMsolvers[iSolver].Ainv,Y) : EMsolvers[iSolver].Ainv\Y
+            #              return Y
+            #          end
             for j = 1:size(rhs,2)
                 ew[:,j,i+1],cgFlag,err,iterTmp, = cg(Atr,vec(rhs[:,j]),
                     x=vec(ew[:,j,i+1]),M=M,maxIter=20,tol=param.cgTol)
-                #println("cg converged to tolerance $(param.cgTol) after $(iterTmp) iterations")
+                #println("At step $i cg converged to tolerance $(param.cgTol) after $(iterTmp) iterations")
                 if cgFlag != 0
                     warn("getData: cg failed to converge at time step $i. Reached residual $err with tolerance $(param.cgTol)")
                 end
