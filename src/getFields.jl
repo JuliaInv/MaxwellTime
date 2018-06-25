@@ -132,8 +132,13 @@ function getFieldsBDF2{T,N}(model::MaxwellTimeModel,
                 ew[:,j,i+1],cgFlag,err,iterTmp, = cg(Atr,vec(rhs[:,j]),
                     x=vec(ew[:,j,i+1]),M=M,maxIter=20,tol=param.cgTol)
                 #println("At step $i cg converged to tolerance $(param.cgTol) after $(iterTmp) iterations")
-                if cgFlag != 0
+                if cgFlag == -1
                     warn("getData: cg failed to converge at time step $i. Reached residual $err with tolerance $(param.cgTol)")
+                elseif cgFlag == -2
+                    warn("getData: cg found non-spd matrix")
+                    println("Were there negative entries in sigma?  $(any(model.values["sigmaCell"] .<= 0.0))")
+                    println("Minimum entry was $(minimum(model.values["sigmaCell"]))")
+                    println("Minimum mu entry was $(minimum(model.values["muCell"]))")
                 end
             end
         else
@@ -286,11 +291,12 @@ function getFieldsDC{T,N}(Msig::SparseMatrixCSC{T,N},
 
     solver.doClear = 1
 
-    G      = getNodalGradientMatrix(M)
-    Nn,    = getNodalConstraints(M)
-    Ne,Qe, = getEdgeConstraints(M)
-    G      = Qe*G*Nn
-    Adc    = G'*Msig*G
+    G        = getNodalGradientMatrix(M)
+    Nn,      = getNodalConstraints(M)
+    Ne,Qe,   = getEdgeConstraints(M)
+    G        = Qe*G*Nn
+    Adc      = G'*Msig*G
+    Adc[1,1] = Adc[1,1] + one(T)
 
     phi0,solver = solveDC!(Adc,wave[1]*G'*s,solver)
     ew[:,:,1]   = -G*phi0

@@ -50,7 +50,8 @@ a     = rand(Msh.nc)
 b     = 10*rand(Msh.nc) - 4
 sigma = a.^b
 mu0   = 4*pi*1e-7  # magnetic permeability
-chi   = zeros(Msh.nc) #100*rand(Msh.nc)
+#chi   = 100*rand(Msh.nc)
+chi   = zeros(Msh.nc)
 mu    = mu0*(1+chi)
 
 #Get data at initial model
@@ -67,7 +68,7 @@ println("Forming sensitivity matrix")
 Curl   = getCurlMatrix(Msh)
 G      = getNodalGradientMatrix(Msh)
 Msig   = getEdgeMassMatrix(Msh,vec(sigma))
-Mmu    = getFaceMassMatrix(Msh,fill(1/mu0,Msh.nc))
+Mmu    = getFaceMassMatrix(Msh,1./mu)
 Ne,Qe, = getEdgeConstraints(Msh)
 Nn,Qn, = getNodalConstraints(Msh)
 Nf,Qf, = getFaceConstraints(Msh)
@@ -189,10 +190,12 @@ println(" ")
 
 m  = MaxwellTimeModel(Dict("sigmaCell"=>sigma,"muCell"=>chi),
                       ["muCell"])
+mInit  = MaxwellTimeModel(Dict("sigmaCell"=>sigma,"muCell"=>mu),
+                        ["muCell"])
 m0 = MaxwellTimeModel(Dict("sigmaCell"=>sigma),Array{String,1}())
 obsTimes   = cumsum(dt[2:end])
 pFor       = getMaxwellTimeParam(Msh,Sources,P',obsTimes,t0,dt,wave,sourceType)
-d,pFor = getData(m,pFor)
+d,pFor = getData(mInit,pFor)
 
 function f2(sigdum)
   d, = getData(sigdum,pFor)

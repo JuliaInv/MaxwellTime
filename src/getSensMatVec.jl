@@ -339,13 +339,15 @@ function getSensMatVecBDF2{Tf<:Real}(x::MaxwellTimeModel{Tf},
     #Are computed as the integral of electric field over a receiver
     #dipole and not as a potential difference
     groundedSource = param.sourceType == :Galvanic ? true : false
+    if groundedSource
+        Jvdc   = zeros(Tf,size(P,2),ns)
+    end
     if groundedSource && invertSigma
         DCsolver = param.DCsolver
         Nn,Qn, = getNodalConstraints(Mesh)
         Gin    = getNodalGradientMatrix(Mesh)
         G      = Qe*Gin*Nn
         A      = getDCmatrix(Msig,G,param) # Forms matrix only if needed
-        Jvdc   = zeros(Tf,size(P,2),ns)
         for j = 1:ns
             Gzi = G'*Ne'*getdEdgeMassMatrix(Mesh,sigma,-Ne*ew[:,j,1])
             rhs = Gzi*x.values["sigmaCell"]
@@ -375,7 +377,7 @@ function getSensMatVecBDF2{Tf<:Real}(x::MaxwellTimeModel{Tf},
                                   x.values["sigmaCell"])) end
         end
         if invertMu
-            @views begin rhs[:,j] .+= Curl'*(Nf'*dFaceMassMatrixTimesVector(Mesh,1./mu,
+            @views begin rhs[:,j] .+= Curl'*(Nf'*dFaceMassMatrixTimesVector(Mesh,mu,
                            Nf*(Curl*ehat[:,j]),
                            DmuinvDmz)) end
         end
@@ -391,7 +393,7 @@ function getSensMatVecBDF2{Tf<:Real}(x::MaxwellTimeModel{Tf},
                          x.values["sigmaCell"]) end
         end
         if invertMu
-            @views begin rhs[:,j] .+= Curl'*(Nf'*dFaceMassMatrixTimesVector(Mesh,1./mu,
+            @views begin rhs[:,j] .+= Curl'*(Nf'*dFaceMassMatrixTimesVector(Mesh,mu,
                            Nf*(Curl*ew[:,j,2]),
                            DmuinvDmz)) end
         end
@@ -422,7 +424,7 @@ function getSensMatVecBDF2{Tf<:Real}(x::MaxwellTimeModel{Tf},
                                 x.values["sigmaCell"]) end
                 end
                 if invertMu
-                    @views begin rhs[:,j] .+= Curl'*(Nf'*dFaceMassMatrixTimesVector(Mesh,1./mu,
+                    @views begin rhs[:,j] .+= Curl'*(Nf'*dFaceMassMatrixTimesVector(Mesh,mu,
                                    Nf*(Curl*ew[:,j,i+1]),
                                    DmuinvDmz)) end
                 end
@@ -445,7 +447,7 @@ function getSensMatVecBDF2{Tf<:Real}(x::MaxwellTimeModel{Tf},
                                 x.values["sigmaCell"]) end
                 end
                 if invertMu
-                    @views begin rhs[:,j] .+= Curl'*(Nf'*dFaceMassMatrixTimesVector(Mesh,1./mu,
+                    @views begin rhs[:,j] .+= Curl'*(Nf'*dFaceMassMatrixTimesVector(Mesh,mu,
                                    Nf*(Curl*ew[:,j,i+1]),
                                    DmuinvDmz)) end
                 end
