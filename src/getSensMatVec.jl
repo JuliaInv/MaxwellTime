@@ -428,13 +428,13 @@ function getSensMatVecBDF2{Tf<:Real}(x::MaxwellTimeModel{Tf},
                                    Nf*(Curl*ew[:,j,i+1]),
                                    DmuinvDmz)) end
                 end
-                println("Calling cg at iteration $i, rhs $j")
+                #println("Calling cg at iteration $i, rhs $j")
                 lam[:,j,3],cgFlag,err,iterTmp, = cg(Atr,rhs[:,j],
                    x=vec(lam[:,j,3]),M=M,maxIter=20,tol=param.cgTol)
                 if cgFlag != 0
                     warn("getSensMatVec: cg failed to converge at time step $i. Reached residual $err with tolerance $(param.cgTol)")
-                else
-                    println("cg converged after $iterTmp iterations with residual $err")
+                # else
+                #     println("cg converged after $iterTmp iterations with residual $err")
                 end
                 # compute Jv
                 @views Jv[:,j,i]  = -P'*(lam[:,j,3])
