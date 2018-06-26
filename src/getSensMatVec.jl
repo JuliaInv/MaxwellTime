@@ -349,8 +349,8 @@ function getSensMatVecBDF2{Tf<:Real}(x::MaxwellTimeModel{Tf},
         G      = Qe*Gin*Nn
         A      = getDCmatrix(Msig,G,param) # Forms matrix only if needed
         for j = 1:ns
-            Gzi = G'*Ne'*getdEdgeMassMatrix(Mesh,sigma,-Ne*ew[:,j,1])
-            rhs = Gzi*x.values["sigmaCell"]
+            rhs = G'*(Ne'*dEdgeMassMatrixTimesVector(Mesh,sigma,-Ne*ew[:,j,1],
+                            x.values["sigmaCell"]))
             lam0,DCsolver    = solveDC!(A,rhs,DCsolver)
             lam[:,j,1]       = -G*lam0 #Taking gradient of lam0
                                        #Prepares for data projection and
@@ -428,10 +428,13 @@ function getSensMatVecBDF2{Tf<:Real}(x::MaxwellTimeModel{Tf},
                                    Nf*(Curl*ew[:,j,i+1]),
                                    DmuinvDmz)) end
                 end
+                println("Calling cg at iteration $i, rhs $j")
                 lam[:,j,3],cgFlag,err,iterTmp, = cg(Atr,rhs[:,j],
                    x=vec(lam[:,j,3]),M=M,maxIter=20,tol=param.cgTol)
                 if cgFlag != 0
                     warn("getSensMatVec: cg failed to converge at time step $i. Reached residual $err with tolerance $(param.cgTol)")
+                else
+                    println("cg converged after $iterTmp iterations with residual $err")
                 end
                 # compute Jv
                 @views Jv[:,j,i]  = -P'*(lam[:,j,3])
