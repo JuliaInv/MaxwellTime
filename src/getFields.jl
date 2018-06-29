@@ -100,7 +100,7 @@ function getFieldsBDF2{T,N}(model::MaxwellTimeModel,
     rhs                  = 3/(2*dt[1])*( Msig*ew[:,:,1] + (wave[1]-wave[2])*s )
     ehat,EMsolvers[1]    = solveMaxTimeBDF2ConstDT!(A,rhs,Msig,Mesh,2/(3*dt[1]),EMsolvers[1])
     EMsolvers[1].doClear = 0
-    rhs                  = 3/(4*dt[1])*( Msig*(ehat+ew[:,:,1]) )
+    rhs                  = 3/(4*dt[1])*( Msig*(ehat+ew[:,:,1]) + (wave[1]-wave[2])*s )
     ew[:,:,2],EMsolvers[1]   = solveMaxTimeBDF2ConstDT!(A,rhs,Msig,Mesh,2/(3*dt[1]),EMsolvers[1])
     param.AuxFields      = ehat
 
