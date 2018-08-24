@@ -323,9 +323,10 @@ function getDCmatrix{T<:Real,N}(Msig::SparseMatrixCSC{T,N},G::SparseMatrixCSC{T,
     if storageLevel == :Matrices
         A = param.Matrices[1]
     elseif storageLevel == :None
-        A   = G'*Msig*G
+        A = G'*Msig*G
+        A[1,1] = A[1,1] + one(T)
     else
-        A = speye(T,N,size(G,2)) # Empty sparse matrix placeholder argument
+        A = speye(T,N,size(G,2)) # Placeholder 
     end
     return A
 end

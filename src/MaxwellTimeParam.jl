@@ -216,7 +216,6 @@ function getMaxwellTimeParam{S<:Real}(Mesh::AbstractMesh,
         DCsolver = hasMUMPS ? getMUMPSsolver([],1,0,1) : error("Unable to load MUMPS")
     elseif DCsolverType ==:Pardiso
         DCsolver = hasPardiso ? getjInvPardisoSolver([],1,0,2,nThreads) : error("Unable to load Pardiso")
-        warn("DC problem can be unstable w Pardiso for large problems")
     elseif DCsolverType == :juliaSolver
         DCsolver = getJuliaSolver(sym=1)
     end
