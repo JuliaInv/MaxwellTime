@@ -92,7 +92,9 @@ function checkDerivativeMaxMu(f::Function,x0::MaxwellTimeModel,pFor;out::Bool=tr
     return  pass,Error,Order
 end
 
-function checkDerivativeMax(f::Function,x0in::MaxwellTimeModel,x0bg;out::Bool=true,tol::Float64=1.9,nSuccess::Int=3)
+function checkDerivativeMax(f::Function,x0in::MaxwellTimeModel,x0bg;
+	                        out::Bool=true,tol::Float64=1.9,
+							nSuccess::Int=3,base=10.0)
 # checkDerivative(f::Function,x0;out::Bool=true,tol::Float64=1.9,nSuccess::Int=3)
 	mu0 = pi*4e-7
 	invertSigma = in("sigmaCell",x0in.activeInversionProperties)
@@ -107,7 +109,7 @@ function checkDerivativeMax(f::Function,x0in::MaxwellTimeModel,x0bg;out::Bool=tr
                          end
 	elseif ~invertSigma & invertMu
 	    x0 = x0in.values["muCell"]
-	    v  = 500*getRandomTestDirection(x0in.values["muCell"])
+	    v  = 100*rand(length(x0))
 	    modfun = x-> begin
                              m  = MaxwellTimeModel(Dict("muCell"=>mu0*(1+x)),["muCell"])
                              dmudm = spdiagm(fill(pi*4e-7,length(x)))
@@ -142,19 +144,19 @@ function checkDerivativeMax(f::Function,x0in::MaxwellTimeModel,x0bg;out::Bool=tr
 	Order   = zeros(10,2)
 	Success = zeros(10)
 	for j=1:10
-	        sigd,   = modfun(x0+10.0^(-j)*v)
+	        sigd,   = modfun(x0+base^(-j)*v)
 	        sigdloc = sigd+x0bg #interpGlobalToLocal(sigd,speye(length(sigd.sigma)),x0bg)
 		ft = f(sigdloc)                # function value
 		ft = vec(ft)
 		Error[j,1] = norm(f0-ft)/nf0          # Error TaylorPoly 0
-		Error[j,2] = norm(f0 .+10.0^(-j)*dvf .- ft)/nf0 # Error TaylorPoly 1
+		Error[j,2] = norm(f0 .+base^(-j)*dvf .- ft)/nf0 # Error TaylorPoly 1
 		if j>1
-			Order[j,:] = log10.(Error[j-1,:]./Error[j,:]);
+			Order[j,:] = log.(base,Error[j-1,:]./Error[j,:]);
 		end
-		if (Order[j,2]>tol) || (Error[j,1]/Error[j,2] > 100); Success[j]=1; end
+		if (Order[j,2]>tol) || (Error[j,1]/Error[j,2] > base^2); Success[j]=1; end
 		if out
 			println(@sprintf("%1.3e\t%1.3e\t%1.3e\t%1.3e\t%1.3e\t%5d",
-							10.0^(-j), Error[j,1],Error[j,2], Order[j,1],Order[j,2],Success[j]))
+							base^(-j), Error[j,1],Error[j,2], Order[j,1],Order[j,2],Success[j]))
 		end
 	end
 	pass = sum(Success) > nSuccess

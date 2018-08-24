@@ -46,10 +46,11 @@ dt0     = 1e-4
 nt      = 4
 #dt      = dt0*ones(nt)
 dt      = dt0*cumprod([1.0;1.25*ones(nt-1)])
+# dt      = [dt[1]*ones(3);dt[2]*ones(3);dt[3]*ones(3);dt[4]*ones(3);]
 #dt       = dt0*[1.0;1.0;1.0;1.25^2]
 t       = [0;cumsum(dt)]
 t0      = t[1]
-wave    = zeros(nt+1)
+wave    = zeros(length(dt)+1)
 wave[1] = 1.0
 #
 # #Random model
@@ -62,7 +63,8 @@ sourceType            = :Galvanic
 timeIntegrationMethod = :BDF2
 obsTimes              = t
 pFor                  = getMaxwellTimeParam(Msh,Sources,P',obsTimes,t0,dt,wave,sourceType,
-                                            timeIntegrationMethod=timeIntegrationMethod)
+                                            timeIntegrationMethod=timeIntegrationMethod,
+                                            EMsolverType=:Pardiso)
 pFor.cgTol = 1e-15
 println("Getting data")
 d,pFor = getData(sigma,pFor)
@@ -105,7 +107,9 @@ A1    = K + 3/(2*dt[1])*Msig
 A2    = K + g12/dt[2]*Msig
 A3    = K + g13/dt[3]*Msig
 A4    = K + g14/dt[4]*Msig
-dCdu  = [G'*Msig*G blnkn;
+Adc   = G'*Msig*G
+Adc[1,1] = Adc[1,1] + 1.0
+dCdu  = [Adc blnkn;
          3/(2*dt[1])*Msig*G A1 blnkee blnkee blnkee blnkee;
          3/(4*dt[1])*Msig*G -3/(4*dt[1])*Msig A1 blnkee blnkee blnkee;
          -g32/(dt[2])*Msig*G blnkee -g22/dt[2]*Msig A2 blnkee blnkee;
@@ -119,7 +123,7 @@ dCdm   = [G'*Ne'*getdEdgeMassMatrix(Msh,-Ne*ew[:,1,1]);
           Ne'*getdEdgeMassMatrix(Msh,1/dt[3]*Ne*(g13*ew[:,1,4]-g23*ew[:,1,3]+g33*ew[:,1,2]));
           Ne'*getdEdgeMassMatrix(Msh,1/dt[4]*Ne*(g14*ew[:,1,5]-g24*ew[:,1,4]+g34*ew[:,1,3]));]
 
-phi0 = (G'*Msig*G)\(G'*Ne'*Sources)
+phi0 = Adc\(G'*Ne'*Sources)
 u0   = [phi0;ehat;vec(ew[:,1,2:end])];
 q = [G'*Ne'*Sources;zeros(5*size(ew,1))]
 
@@ -189,6 +193,10 @@ D,pFor = getData(sigma,pFor)
 # Jz = JzStep
 
 println(" ")
+println("==========  Test sigma inversion ======================")
+println(" ")
+
+println(" ")
 println("==========  Derivative Test ======================")
 println(" ")
 
@@ -197,8 +205,15 @@ function f(sigdum)
   return d
 end
 
+dm    = exp.(randn(Msh.nc))
+ineg  = find(sigma+dm .< 1e-8)
+dm[ineg] = 0.0
+dm = (1e-2)*dm
+println("nnegs = $(size(ineg)), $(norm(dm)/length(dm))")
+
 df(zdum,sigdum) = getSensMatVec(zdum,sigdum,pFor)
-pass,Error,Order = checkDerivativeMax(f,df,sigma;nSuccess=5)
+pass,Error,Order = checkDerivativeMax(f,df,sigma;nSuccess=5,
+                                      v=dm)
 @test pass
 
 
@@ -221,5 +236,127 @@ I2 = dot(JTz,z)
 println(I1,"      ",I2)
 println("Relative error:",abs(I1-I2)/abs(I1))
 @test abs(I1-I2)/abs(I1) < 1e-10
+
+println(" ")
+println("==========  Test mu inversion ======================")
+println(" ")
+
+mu  = fill(mu,Msh.nc)
+chi = zeros(size(mu))
+
+m  = MaxwellTimeModel(Dict("sigmaCell"=>sigma,"muCell"=>chi),
+                      ["muCell"])
+mInit  = MaxwellTimeModel(Dict("sigmaCell"=>sigma,"muCell"=>mu),
+                          ["muCell"])
+m0 = MaxwellTimeModel(Dict("sigmaCell"=>sigma),Array{String,1}())
+obsTimes   = cumsum(dt[2:end])
+pFor       = getMaxwellTimeParam(Msh,Sources,P',obsTimes,t0,dt,wave,sourceType,
+                  timeIntegrationMethod=:BDF2)
+d,pFor = getData(mInit,pFor)
+
+function f2(sigdum)
+  d, = getData(sigdum,pFor)
+  return d
+end
+
+df2(zdum,sigdum) = getSensMatVec(zdum,sigdum,pFor)
+
+println(" ")
+println("==========  Derivative Test ======================")
+println(" ")
+
+pass,Error,Order = checkDerivativeMax(f2,df2,m,m0;nSuccess=4,base=10.0)
+@test pass
+
+
+println(" ")
+println("==========  Adjoint Test ======================")
+println(" ")
+
+mu0   = pi*4e-7
+v     = randn(prod(size(d)));
+dmudm = spdiagm(fill(mu0,length(mu)));
+dm    = MaxwellTimeModelDerivative(Dict(
+        "muCell"=>dmudm),["muCell"])
+
+zmod = dm*z
+# zmod = MaxwellTimeModel(Dict("sigmaCell"=>sigma,
+#                        "muCell"=>dmudm*z),["muCell"])
+m2   = MaxwellTimeModel(Dict("sigmaCell"=>sigma,
+                        "muCell"=>mu0*(1+chi)),["muCell"])
+tic()
+Jz = getSensMatVec(zmod,m2,pFor)
+toc()
+I1 = dot(v,Jz)
+
+tic()
+JTzLoc = getSensTMatVec(v,m2,pFor)
+JTz    = dm'*JTzLoc
+toc()
+
+I2 = dot(JTz,z)
+
+println(I1,"      ",I2)
+println("Relative error:",abs(I1-I2)/abs(I1))
+@test abs(I1-I2)/abs(I1) < 1e-10
+
+println(" ")
+println("==========  Test simultaneous sigma and mu inversion ======================")
+println(" ")
+
+activeProps = ["sigmaCell", "muCell"]
+m    = MaxwellTimeModel(Dict("sigmaCell"=>log.(sigma),
+                        "muCell"=>chi),activeProps)
+m0   = MaxwellTimeModel()
+pFor = getMaxwellTimeParam(Msh,Sources,P',obsTimes,t0,dt,wave,sourceType)
+
+function f3(sigdum)
+  d, = getData(sigdum,pFor)
+  return d
+end
+
+df3(zdum,sigdum) = getSensMatVec(zdum,sigdum,pFor)
+
+println(" ")
+println("==========  Derivative Test ======================")
+println(" ")
+
+
+pass,Error,Order = checkDerivativeMax(f3,df3,m,m0;nSuccess=4)
+@test pass
+
+
+println(" ")
+println("==========  Adjoint Test ======================")
+println(" ")
+
+dsigdm = [spdiagm(sigma) spzeros(Msh.nc,Msh.nc)]
+dmudm  = [spzeros(Msh.nc,Msh.nc) spdiagm(fill(pi*4e-7,length(mu)))]
+dm     = MaxwellTimeModelDerivative(Dict(
+           "sigmaCell"=>dsigdm,"muCell"=>dmudm),activeProps)
+
+z2 = rand(2*Msh.nc)
+
+zmod = dm*z2
+# zmod = MaxwellTimeModel(Dict("sigmaCell"=>dsigdm*z2,
+#          "muCell"=>dmudm*z2),activeProps)
+m2   = MaxwellTimeModel(Dict("sigmaCell"=>sigma,
+         "muCell"=>mu0*(1+chi)),activeProps)
+tic()
+Jz = getSensMatVec(zmod,m2,pFor)
+toc()
+I1 = dot(v,Jz)
+
+tic()
+JTzLoc = getSensTMatVec(v,m2,pFor)
+JTz    = dm'*JTzLoc
+toc()
+
+I2 = dot(JTz,z2)
+
+println(I1,"      ",I2)
+println("Relative error:",abs(I1-I2)/abs(I1))
+@test abs(I1-I2)/abs(I1) < 1e-10
+
 
 end

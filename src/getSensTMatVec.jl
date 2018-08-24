@@ -219,10 +219,6 @@ function getSensTMatVecBDF2{Tf<:Real}(z::Vector{Tf},model::MaxwellTimeModel,
     invertSigma = in("sigmaCell", model.activeInversionProperties)
     invertMu    = in(   "muCell", model.activeInversionProperties)
 
-    if invertMu
-        error("Inverting for mu with bdf2 time-stepping not yet supported")
-    end
-
     #Unpack param
     Mesh          = param.Mesh
     storageLevel  = param.storageLevel
@@ -244,6 +240,7 @@ function getSensTMatVecBDF2{Tf<:Real}(z::Vector{Tf},model::MaxwellTimeModel,
         Curl   = Qf*Curl*Ne
         Mmu    = getFaceMassMatrix(Mesh,1./mu)
         Mmu    = Nf'*Mmu*Nf
+        DmuinvDmu = spdiagm(-1./(mu.^2))
     else
         Curl = spzeros(Tf,Tn,0,0)
         Mmu  = spzeros(Tf,Tn,0,0)
@@ -256,13 +253,6 @@ function getSensTMatVecBDF2{Tf<:Real}(z::Vector{Tf},model::MaxwellTimeModel,
     nt  = length(dt)
     nr  = size(P,2)
     lam = zeros(Tf,ne,ns,3)
-
-    #For debugging
-    # Nn,Qn,   = getNodalConstraints(Mesh)
-    # Gin      = getNodalGradientMatrix(Mesh)
-    # G        = Qe*Gin*Nn
-    # nn = size(G,2)
-    #tmp = zeros(T,nn+5*ne)
 
     # Multiply by transpose of time interpolation matrix
     # To map from data space to data at all times space
@@ -289,16 +279,17 @@ function getSensTMatVecBDF2{Tf<:Real}(z::Vector{Tf},model::MaxwellTimeModel,
         end
     end
 
-#      JTvSigma = 0
-#      JTvMu    = 0
-    JTv = zeros(Tf,Mesh.nc)
+    JTv   = Dict{String,Vector{Float64}}()
+    if invertSigma
+        JTv["sigmaCell"] = zeros(Tf,length(sigma))
+    end
+    if invertMu
+        JTv["muCell"] = zeros(Tf,length(mu))
+    end
     uniqueSteps = unique(dt)
     A           = speye(Tf,Tn,size(Ne,2)) #spzeros(T,0,0)
     iSolver     = 0
-    #A,iSolver   = getBDF2ConstDTmatrix!(dt[end],A,K,Msig,param,uniqueSteps)
     dt          = [dt;dt[end];dt[end]]
-    nelam       = zeros(Tf,size(Ne,1))
-    Gzitnelam   = zeros(Tf,Mesh.nc)
     for i=nt:-1:1
         tau1 = i > 1 ? dt[i]/dt[i-1] : one(Tf)
         tau2 = dt[i+1]/dt[i]
@@ -315,46 +306,48 @@ function getSensTMatVecBDF2{Tf<:Real}(z::Vector{Tf},model::MaxwellTimeModel,
             Atr  = K + (g1/dt[i])*Msig
             if EMsolvers[iSolver].doClear == 1
                 clear!(EMsolvers[iSolver])
-                EMsolvers[iSolver].Ainv = hasMUMPS ? factorMUMPS(A,1) : cholfact(A)
+                factorLinearSystem!(A,EMsolvers[iSolver])
                 EMsolvers[iSolver].doClear = 0
             end
-            M = Y -> begin
-                         Y = hasMUMPS ? applyMUMPS(EMsolvers[iSolver].Ainv,Y) : EMsolvers[iSolver].Ainv\Y
-                         return Y
-                     end
+            M(X) = solveLinearSystem!(A,X,similar(X),EMsolvers[iSolver])[1]
         end
-        for j = 1:ns
-            rhs  = pz[:,j,i] + Msig*(g2p*lam[:,j,2]/dt[i+1]-g3p*lam[:,j,3]/dt[i+2])
-            #println("At step $i, norms are $(norm(pz[:,j,i])), $(norm(rhs))")
-            if norm(rhs) > 1e-20
-                #println("hit norm if at step $i")
-                if (i>1) && (dt[i] != dt[i-1])
-                    #println("hit cg if at step $i, seeing rhs norm $(norm(rhs))")
-                    lam[:,j,1],cgFlag,err,iterTmp, = cg(Atr,rhs,
-                       x=vec(lam[:,j,1]),M=M,maxIter=20,tol=param.cgTol)
-                    #println("On iter $i $cgFlag $err $(norm(lam[:,j,1])) $(norm(solveMUMPS(Atr,rhs,1)))")
+
+        rhs  = @views pz[:,:,i] + Msig*(g2p*lam[:,:,2]/dt[i+1]-g3p*lam[:,:,3]/dt[i+2])
+        if (i>1) && (dt[i] != dt[i-1])
+            for j in 1:ns
+                if norm(rhs) > 1e-20
+                    lam[:,j,1],cgFlag,err,iterTmp, = cg(Atr,rhs[:,j],
+                        x=vec(lam[:,j,1]),M=M,maxIter=20,tol=param.cgTol)
                     if cgFlag != 0
                         warn("getSensTMatVec: cg failed to converge at time step $i. Exited with flag $cgFlag. Reached residual $err with tolerance $(param.cgTol)")
                     end
-                else
-                    lam[:,j,1],EMsolvers[iSolver] = solveMaxTimeBDF2ConstDT!(A,rhs,Msig,Mesh,dt[i],EMsolvers[iSolver])
-                    EMsolvers[iSolver].doClear = 0
                 end
             end
-            if i>1
-                Gzi = getdEdgeMassMatrix(Mesh,sigma,1/dt[i]*Ne*(g1*ew[:,j,i+1]-
-                              g2*ew[:,j,i] + g3*ew[:,j,i-1]))
-            else
-                Gzi = getdEdgeMassMatrix(Mesh,sigma,1/dt[1]*Ne*(1.5*ew[:,j,2]-
-                                              0.75*ehat[:,j]-0.75*ew[:,j,1]))
-            end
-            A_mul_B!(nelam,Ne,lam[:,j,1]) # nelam = Ne*lam[:,j,1]
-            At_mul_B!(Gzitnelam,Gzi,nelam) # Gzi'*nelam
-            JTv .-= Gzitnelam
-            lam[:,j,3] = lam[:,j,2]
-            lam[:,j,2] = lam[:,j,1]
-            #tmp[nn+i*ne+1:nn+(i+1)*ne] = lam[:,j,1]
+        else
+            lam[:,:,1],EMsolvers[iSolver] = solveMaxTimeBDF2ConstDT!(A,rhs,Msig,Mesh,dt[i],EMsolvers[iSolver])
+            EMsolvers[iSolver].doClear = 0
         end
+
+        for j = 1:ns
+            if invertSigma
+                if i>1
+                    JTv["sigmaCell"] .-= @views dEdgeMassMatrixTrTimesVector(Mesh,sigma,
+                      Ne*((g1.*ew[:,j,i+1].-g2.*ew[:,j,i] .+ g3.*ew[:,j,i-1])./dt[i]),
+                      Ne*lam[:,j,1])
+                else
+                    JTv["sigmaCell"] .-= @views dEdgeMassMatrixTrTimesVector(Mesh,sigma,
+                      Ne*((1.5.*ew[:,j,2].-0.75.*ehat[:,j].-0.75.*ew[:,j,1])./dt[i]),
+                      Ne*lam[:,j,1])
+                end
+            end
+            if invertMu
+                JTv["muCell"] .-= @views DmuinvDmu*dFaceMassMatrixTrTimesVector(Mesh,mu,
+                  Nf*(Curl*ew[:,j,i+1]),
+                  Nf*(Curl*lam[:,j,1]))
+            end
+        end
+        lam[:,:,3] = lam[:,:,2]
+        lam[:,:,2] = lam[:,:,1]
     end
 
     #Do ehat stuff
@@ -363,11 +356,16 @@ function getSensTMatVecBDF2{Tf<:Real}(z::Vector{Tf},model::MaxwellTimeModel,
         rhs = 3/(4*dt[1])*Msig*lam[:,j,2]
         lmTmp[:,j],EMsolvers[iSolver] = solveMaxTimeBDF2ConstDT!(A,rhs,Msig,
                                                   Mesh,dt[1],EMsolvers[iSolver])
-        Gzi = getdEdgeMassMatrix(Mesh,sigma,3/(2*dt[1])*Ne*(ehat[:,j]-ew[:,j,1]))
-        A_mul_B!(nelam,Ne,lmTmp[:,j])
-        At_mul_B!(Gzitnelam,Gzi,nelam) # Gzi'*nelam
-        JTv .-= Gzitnelam
-        #tmp[nn+1:nn+ne] = lam[:,j,1]
+        if invertSigma
+            JTv["sigmaCell"] .-= @views dEdgeMassMatrixTrTimesVector(Mesh,sigma,
+              Ne*(1.5.*(ehat[:,j].-ew[:,j,1])./dt[1]),
+              Ne*lmTmp[:,j])
+        end
+        if invertMu
+            JTv["muCell"] .-= @views DmuinvDmu*dFaceMassMatrixTrTimesVector(Mesh,mu,
+              Nf*(Curl*ehat[:,j]),
+              Nf*(Curl*lmTmp[:,j]))
+        end
     end
     if storageLevel != :Factors
         for solver in EMsolvers
@@ -380,7 +378,7 @@ function getSensTMatVecBDF2{Tf<:Real}(z::Vector{Tf},model::MaxwellTimeModel,
     #Note that this code assumes (for grounded sources) that DC data
     #Are computed as the integral of electric field over a receiver
     #dipole and not as a potential difference
-    if groundedSource
+    if groundedSource && invertSigma
         DCsolver = param.DCsolver
         Nn,Qn,   = getNodalConstraints(Mesh)
         Gin      = getNodalGradientMatrix(Mesh)
@@ -394,16 +392,15 @@ function getSensTMatVecBDF2{Tf<:Real}(z::Vector{Tf},model::MaxwellTimeModel,
                              3/(4*dt[1])*G'*Msig*lam[:,j,2] -
                              3/(2*dt[1])*G'*Msig*lmTmp[:,j]
             lam0,DCsolver = solveDC!(A,rhs,DCsolver)
-            Gzi           = getdEdgeMassMatrix(Mesh,sigma,-Ne*ew[:,j,1])
-            JTv           .-= Gzi'*(Ne*G*lam0)
-            #tmp[1:nn] = lam0
+            JTv["sigmaCell"] .-= @views dEdgeMassMatrixTrTimesVector(Mesh,sigma,
+                                   -Ne*ew[:,j,1],Ne*(G*lam0))
         end
         if param.storageLevel != :Factors
             clear!(DCsolver)
             DCsolver.doClear = 1
         end
     end
-    return MaxwellTimeModel(Dict("sigmaCell"=>JTv),["sigmaCell"])
+    return MaxwellTimeModel(JTv, model.activeInversionProperties)
 end
 
 #----------------------------------------------------------------------
